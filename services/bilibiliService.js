@@ -56,7 +56,7 @@ class BilibiliService {
             
             const response = await axios.get('https://api.bilibili.com/x/web-interface/nav', {
                 headers,
-                timeout: 10000
+                timeout: 30000 // 增加到 30 秒，适应云服务网络延迟
             });
 
             if (response.data && response.data.code === 0) {
@@ -157,7 +157,7 @@ class BilibiliService {
         
         const response = await axios.get(apiUrl, {
             headers,
-            timeout: 10000
+            timeout: 30000 // 增加到 30 秒，适应云服务网络延迟
         });
 
         if (response.data && response.data.code === 0) {
@@ -192,7 +192,7 @@ class BilibiliService {
         
         const response = await axios.get(apiUrl, {
             headers,
-            timeout: 10000
+            timeout: 30000 // 增加到 30 秒，适应云服务网络延迟
         });
 
         if (response.data && response.data.code === 0) {
