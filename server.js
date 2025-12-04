@@ -499,22 +499,12 @@ app.get('/api/bilibili/stream', async (req, res) => {
         const filename = `${links.title}_${type}.${ext}`;
         
         if (format && format !== (type === 'audio' ? 'm4a' : 'm4s')) {
-            // 需要格式转换（带超时和错误处理）
-            try {
-                await bilibiliService.streamWithFormat(targetUrl, res, filename, type, format);
-            } catch (error) {
-                console.error('格式转换失败，回退到原始格式:', error.message);
-                // 如果转换失败，回退到直接代理
-                if (!res.headersSent) {
-                    const originalExt = type === 'audio' ? 'm4a' : 'm4s';
-                    const originalFilename = filename.replace(`.${format}`, `.${originalExt}`);
-                    await bilibiliService.streamProxy(targetUrl, res, originalFilename);
-                } else {
-                    throw error;
-                }
-            }
+            // 需要格式转换
+            console.log(`开始格式转换: ${type} -> ${format}`);
+            await bilibiliService.streamWithFormat(targetUrl, res, filename, type, format);
         } else {
-            // 直接代理
+            // 直接代理（原始格式）
+            console.log(`直接代理下载: ${filename}`);
             await bilibiliService.streamProxy(targetUrl, res, filename);
         }
         

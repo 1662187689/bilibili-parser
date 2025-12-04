@@ -911,28 +911,58 @@ class BilibiliService {
     async convertVideoFormat(inputPath, outputPath, format) {
         return new Promise((resolve, reject) => {
             const formatConfig = this.getFormatConfig(format);
+            
+            // 构建 ffmpeg 参数
             const args = [
                 '-i', inputPath,
                 '-c:v', formatConfig.videoCodec,
                 '-c:a', formatConfig.audioCodec,
+                '-movflags', '+faststart', // 优化 MP4 文件，支持流式播放
                 '-y',
                 outputPath
             ];
+            
+            // 对于某些格式，添加额外参数
+            if (format === 'webm') {
+                args.splice(-2, 0, '-b:v', '1M', '-b:a', '128k'); // 设置码率
+            } else if (format === 'flv') {
+                args.splice(-2, 0, '-f', 'flv'); // 明确指定格式
+            }
+
+            console.log(`执行 ffmpeg 转换: ffmpeg ${args.join(' ')}`);
 
             const ffmpeg = spawn('ffmpeg', args, {
                 stdio: ['ignore', 'pipe', 'pipe']
             });
 
             let stderr = '';
+            let hasError = false;
+            
             ffmpeg.stderr.on('data', (data) => {
-                stderr += data.toString();
+                const output = data.toString();
+                stderr += output;
+                // 检查是否有错误信息
+                if (output.toLowerCase().includes('error') || output.toLowerCase().includes('failed')) {
+                    hasError = true;
+                }
             });
 
             ffmpeg.on('close', (code) => {
-                if (code === 0) {
-                    resolve(outputPath);
+                if (code === 0 && !hasError) {
+                    // 检查输出文件是否存在且有内容
+                    if (fs.existsSync(outputPath)) {
+                        const stats = fs.statSync(outputPath);
+                        if (stats.size > 0) {
+                            console.log(`格式转换成功: ${outputPath} (${stats.size} bytes)`);
+                            resolve(outputPath);
+                        } else {
+                            reject(new Error('转换后的文件为空'));
+                        }
+                    } else {
+                        reject(new Error('转换后的文件不存在'));
+                    }
                 } else {
-                    reject(new Error(`ffmpeg 转换失败: ${stderr}`));
+                    reject(new Error(`ffmpeg 转换失败 (退出码: ${code}): ${stderr.substring(0, 500)}`));
                 }
             });
 
@@ -963,20 +993,39 @@ class BilibiliService {
                 outputPath
             ];
 
+            console.log(`执行 ffmpeg 音频转换: ffmpeg ${args.join(' ')}`);
+
             const ffmpeg = spawn('ffmpeg', args, {
                 stdio: ['ignore', 'pipe', 'pipe']
             });
 
             let stderr = '';
+            let hasError = false;
+            
             ffmpeg.stderr.on('data', (data) => {
-                stderr += data.toString();
+                const output = data.toString();
+                stderr += output;
+                if (output.toLowerCase().includes('error') || output.toLowerCase().includes('failed')) {
+                    hasError = true;
+                }
             });
 
             ffmpeg.on('close', (code) => {
-                if (code === 0) {
-                    resolve(outputPath);
+                if (code === 0 && !hasError) {
+                    // 检查输出文件是否存在且有内容
+                    if (fs.existsSync(outputPath)) {
+                        const stats = fs.statSync(outputPath);
+                        if (stats.size > 0) {
+                            console.log(`音频转换成功: ${outputPath} (${stats.size} bytes)`);
+                            resolve(outputPath);
+                        } else {
+                            reject(new Error('转换后的音频文件为空'));
+                        }
+                    } else {
+                        reject(new Error('转换后的音频文件不存在'));
+                    }
                 } else {
-                    reject(new Error(`ffmpeg 转换失败: ${stderr}`));
+                    reject(new Error(`ffmpeg 音频转换失败 (退出码: ${code}): ${stderr.substring(0, 500)}`));
                 }
             });
 
@@ -1024,15 +1073,27 @@ class BilibiliService {
             
             // 发送转换后的文件
             const stats = fs.statSync(outputFile);
+            console.log(`准备发送文件: ${filename}, 大小: ${stats.size} bytes`);
+            
             const contentType = this.getContentType(format);
             res.setHeader('Content-Type', contentType);
             res.setHeader('Content-Length', stats.size);
             res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Cache-Control', 'no-cache');
             
             const fileStream = fs.createReadStream(outputFile);
+            
+            // 监听数据流
+            let bytesSent = 0;
+            fileStream.on('data', (chunk) => {
+                bytesSent += chunk.length;
+            });
+            
             fileStream.pipe(res);
             
             fileStream.on('end', () => {
+                console.log(`文件发送完成: ${filename}, 已发送: ${bytesSent} bytes`);
                 setTimeout(() => {
                     try { 
                         if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
@@ -1050,8 +1111,13 @@ class BilibiliService {
                 }
             });
             
+            res.on('close', () => {
+                console.log(`客户端连接关闭: ${filename}`);
+            });
+            
         } catch (error) {
             console.error(`格式转换失败: ${error.message}`);
+            console.error('错误堆栈:', error.stack);
             
             // 清理临时文件
             try {
@@ -1059,12 +1125,13 @@ class BilibiliService {
                 if (fs.existsSync(outputFile)) fs.unlinkSync(outputFile);
             } catch (e) {}
             
-            // 如果转换失败，回退到直接代理原始文件
+            // 如果转换失败，返回错误信息
             if (!res.headersSent) {
-                console.log('回退到直接代理原始文件...');
-                const originalExt = type === 'audio' ? 'm4a' : 'm4s';
-                const originalFilename = filename.replace(`.${format}`, `.${originalExt}`);
-                await this.streamProxy(url, res, originalFilename);
+                res.status(500).json({ 
+                    success: false, 
+                    error: `格式转换失败: ${error.message}`,
+                    suggestion: '请检查服务器是否安装了 ffmpeg，或尝试使用原始格式下载'
+                });
             } else {
                 throw error;
             }
