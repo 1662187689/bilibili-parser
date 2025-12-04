@@ -360,7 +360,7 @@ app.get('/api/bilibili/user-videos', async (req, res) => {
     }
 });
 
-// 批量解析接口
+// 批量处理接口
 app.post('/api/parse/batch', async (req, res) => {
     try {
         const { urls } = req.body;
@@ -385,7 +385,7 @@ app.post('/api/parse/batch', async (req, res) => {
         });
         
     } catch (error) {
-        console.error('批量解析错误:', error);
+        console.error('批量处理错误:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -457,7 +457,7 @@ app.get('/api/bilibili/direct-links', async (req, res) => {
             cookies = loginSessions.get(sessionId).cookies;
         }
         
-        console.log('获取B站直接链接:', { url, qn, hasLogin: !!cookies });
+        console.log('获取视频直接链接:', { url, qn, hasLogin: !!cookies });
         
         const links = await bilibiliService.getDirectLinks(url, parseInt(qn), cookies);
         res.json({ success: true, data: links });
@@ -516,7 +516,7 @@ app.get('/api/bilibili/stream', async (req, res) => {
     }
 });
 
-// ==================== 视频解析 ====================
+// ==================== 视频处理 ====================
 
 app.post('/api/parse', async (req, res) => {
     try {

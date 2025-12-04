@@ -82,7 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (parseBtn) parseBtn.addEventListener('click', handleSmartParse);
     if (videoUrlInput) {
         videoUrlInput.addEventListener('keydown', (e) => {
-            // Ctrl+Enter 触发解析
+            // Ctrl+Enter 触发处理
             if (e.ctrlKey && e.key === 'Enter') {
                 e.preventDefault();
                 handleSmartParse();
@@ -611,7 +611,7 @@ function extractBilibiliUrls(text) {
     return Array.from(urls);
 }
 
-// 智能解析入口
+// 智能处理入口
 async function handleSmartParse() {
     const input = videoUrlInput.value.trim();
     
@@ -637,7 +637,7 @@ async function handleSmartParse() {
             await handleSingleParse(inputType.url);
             break;
         default:
-            // 尝试作为单链接解析
+            // 尝试作为单链接处理
             const urls = extractBilibiliUrls(input);
             if (urls.length > 0) {
                 if (urls.length === 1) {
@@ -903,13 +903,13 @@ async function retryBatchItem(index) {
     const result = batchResults[index];
     if (!result) return;
     
-    showToast('正在重新解析...', 'success');
+    showToast('正在重新处理...', 'success');
     
     const batchListEl = document.getElementById('batchList');
     if (batchListEl && batchListEl.children[index]) {
         batchListEl.children[index].innerHTML = `
             <div class="batch-info">
-                <div class="batch-title">正在重新解析...</div>
+                <div class="batch-title">正在重新处理...</div>
             </div>
         `;
     }
@@ -957,7 +957,7 @@ async function retryBatchItem(index) {
                 url: result.url,
                 error: data.error || '处理失败'
             };
-            showToast('解析仍然失败', 'error');
+            showToast('处理仍然失败', 'error');
             
             // 更新列表项显示错误
             if (batchListEl && batchListEl.children[index]) {
@@ -1269,7 +1269,7 @@ async function handleFavoritesParse(favId) {
             }
             if (batchCountEl) batchCountEl.textContent = batchResults.length;
             
-            showToast(`成功解析 ${data.videos.length} 个视频`, 'success');
+            showToast(`成功处理 ${data.videos.length} 个视频`, 'success');
         } else {
             throw new Error(data.error || '解析收藏夹失败');
         }
