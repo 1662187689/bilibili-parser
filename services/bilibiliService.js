@@ -876,6 +876,156 @@ class BilibiliService {
     }
 
     /**
+     * 获取格式的 MIME 类型
+     */
+    getContentType(format) {
+        const types = {
+            'mp4': 'video/mp4',
+            'flv': 'video/x-flv',
+            'mkv': 'video/x-matroska',
+            'webm': 'video/webm',
+            'mp3': 'audio/mpeg',
+            'flac': 'audio/flac',
+            'aac': 'audio/aac',
+            'm4a': 'audio/mp4'
+        };
+        return types[format] || 'video/mp4';
+    }
+
+    /**
+     * 获取格式的 ffmpeg 编码器配置
+     */
+    getFormatConfig(format) {
+        const configs = {
+            'mp4': { videoCodec: 'copy', audioCodec: 'aac' },
+            'flv': { videoCodec: 'flv1', audioCodec: 'mp3' },
+            'mkv': { videoCodec: 'copy', audioCodec: 'copy' },
+            'webm': { videoCodec: 'libvpx-vp9', audioCodec: 'libopus' }
+        };
+        return configs[format] || configs['mp4'];
+    }
+
+    /**
+     * 转换视频格式
+     */
+    async convertVideoFormat(inputPath, outputPath, format) {
+        return new Promise((resolve, reject) => {
+            const formatConfig = this.getFormatConfig(format);
+            const args = [
+                '-i', inputPath,
+                '-c:v', formatConfig.videoCodec,
+                '-c:a', formatConfig.audioCodec,
+                '-y',
+                outputPath
+            ];
+
+            const ffmpeg = spawn('ffmpeg', args, {
+                stdio: ['ignore', 'pipe', 'pipe']
+            });
+
+            let stderr = '';
+            ffmpeg.stderr.on('data', (data) => {
+                stderr += data.toString();
+            });
+
+            ffmpeg.on('close', (code) => {
+                if (code === 0) {
+                    resolve(outputPath);
+                } else {
+                    reject(new Error(`ffmpeg 转换失败: ${stderr}`));
+                }
+            });
+
+            ffmpeg.on('error', (error) => {
+                reject(new Error(`启动 ffmpeg 失败: ${error.message}`));
+            });
+        });
+    }
+
+    /**
+     * 转换音频格式
+     */
+    async convertAudioFormat(inputPath, outputPath, format) {
+        return new Promise((resolve, reject) => {
+            const audioCodecs = {
+                'mp3': ['libmp3lame', '192k'],
+                'flac': ['flac', ''],
+                'aac': ['aac', '192k'],
+                'm4a': ['aac', '192k']
+            };
+            
+            const codec = audioCodecs[format] || ['libmp3lame', '192k'];
+            const args = [
+                '-i', inputPath,
+                '-acodec', codec[0],
+                ...(codec[1] ? ['-ab', codec[1]] : []),
+                '-y',
+                outputPath
+            ];
+
+            const ffmpeg = spawn('ffmpeg', args, {
+                stdio: ['ignore', 'pipe', 'pipe']
+            });
+
+            let stderr = '';
+            ffmpeg.stderr.on('data', (data) => {
+                stderr += data.toString();
+            });
+
+            ffmpeg.on('close', (code) => {
+                if (code === 0) {
+                    resolve(outputPath);
+                } else {
+                    reject(new Error(`ffmpeg 转换失败: ${stderr}`));
+                }
+            });
+
+            ffmpeg.on('error', (error) => {
+                reject(new Error(`启动 ffmpeg 失败: ${error.message}`));
+            });
+        });
+    }
+
+    /**
+     * 流式转换并下载
+     */
+    async streamWithFormat(url, res, filename, type, format) {
+        try {
+            const timestamp = Date.now();
+            const tempFile = path.join(this.downloadDir, `${timestamp}_temp.${type === 'audio' ? 'm4a' : 'm4s'}`);
+            const outputFile = path.join(this.downloadDir, `${timestamp}_output.${format}`);
+            
+            // 先下载到临时文件
+            await this.downloadFile(url, tempFile);
+            
+            // 转换格式
+            if (type === 'audio') {
+                await this.convertAudioFormat(tempFile, outputFile, format);
+            } else {
+                await this.convertVideoFormat(tempFile, outputFile, format);
+            }
+            
+            // 发送转换后的文件
+            const stats = fs.statSync(outputFile);
+            const contentType = this.getContentType(format);
+            res.setHeader('Content-Type', contentType);
+            res.setHeader('Content-Length', stats.size);
+            res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+            
+            const fileStream = fs.createReadStream(outputFile);
+            fileStream.pipe(res);
+            
+            fileStream.on('end', () => {
+                setTimeout(() => {
+                    try { fs.unlinkSync(tempFile); fs.unlinkSync(outputFile); } catch (e) {}
+                }, 5000);
+            });
+        } catch (error) {
+            throw new Error(`流式转换失败: ${error.message}`);
+        }
+    }
+
+    /**
      * 流式代理下载（不保存到服务器，直接转发）
      */
     async streamProxy(targetUrl, res, filename) {
