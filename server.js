@@ -75,7 +75,7 @@ app.post('/api/announcement', (req, res) => {
     }
 });
 
-// ==================== B站登录系统 ====================
+// ==================== 登录系统 ====================
 
 // 获取登录二维码
 app.get('/api/bilibili/qrcode', async (req, res) => {
@@ -244,7 +244,7 @@ app.post('/api/bilibili/logout', (req, res) => {
     }
 });
 
-// B站视频下载（支持画质选择）
+// 视频下载（支持画质选择）
 app.get('/api/bilibili/download', async (req, res) => {
     try {
         const { url, qn = 80, format = 'mp4', nameFormat = 'title' } = req.query;
@@ -260,20 +260,20 @@ app.get('/api/bilibili/download', async (req, res) => {
             cookies = loginSessions.get(sessionId).cookies;
         }
         
-        console.log('B站视频下载请求:', { url, qn, format, nameFormat, hasLogin: !!cookies });
+        console.log('视频下载请求:', { url, qn, format, nameFormat, hasLogin: !!cookies });
         
         // 使用bilibiliService下载（支持格式和命名）
         await bilibiliService.downloadWithQuality(url, parseInt(qn), cookies, res, format, nameFormat);
         
     } catch (error) {
-        console.error('B站下载错误:', error);
+        console.error('下载错误:', error);
         if (!res.headersSent) {
             res.status(500).json({ success: false, error: error.message });
         }
     }
 });
 
-// B站音频下载（支持画质选择）
+// 音频下载（支持画质选择）
 app.get('/api/bilibili/download/audio', async (req, res) => {
     try {
         const { url, qn = 80 } = req.query;
@@ -289,20 +289,20 @@ app.get('/api/bilibili/download/audio', async (req, res) => {
             cookies = loginSessions.get(sessionId).cookies;
         }
         
-        console.log('B站音频下载请求:', { url, qn, hasLogin: !!cookies });
+        console.log('音频下载请求:', { url, qn, hasLogin: !!cookies });
         
         // 使用bilibiliService下载音频
         await bilibiliService.downloadAudio(url, parseInt(qn), cookies, res);
         
     } catch (error) {
-        console.error('B站音频下载错误:', error);
+        console.error('音频下载错误:', error);
         if (!res.headersSent) {
             res.status(500).json({ success: false, error: error.message });
         }
     }
 });
 
-// B站收藏夹解析
+// 收藏夹处理
 app.get('/api/bilibili/favorites', async (req, res) => {
     try {
         const { id } = req.query;
@@ -318,49 +318,20 @@ app.get('/api/bilibili/favorites', async (req, res) => {
             cookies = loginSessions.get(sessionId).cookies;
         }
         
-        console.log('解析B站收藏夹:', { id, hasLogin: !!cookies });
+        console.log('处理收藏夹:', { id, hasLogin: !!cookies });
         
-        // 使用multiPlatformService解析收藏夹
+        // 使用multiPlatformService处理收藏夹
         const result = await multiPlatformService.parseBilibiliFavorites(id, cookies);
         
         res.json(result);
         
     } catch (error) {
-        console.error('收藏夹解析错误:', error);
+        console.error('收藏夹处理错误:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-// B站合集/视频列表解析
-app.get('/api/bilibili/series', async (req, res) => {
-    try {
-        const { url } = req.query;
-        
-        if (!url) {
-            return res.status(400).json({ success: false, error: '请提供视频链接' });
-        }
-        
-        // 获取用户cookies（如果已登录）
-        let cookies = null;
-        const sessionId = req.cookies?.bili_session;
-        if (sessionId && loginSessions.has(sessionId)) {
-            cookies = loginSessions.get(sessionId).cookies;
-        }
-        
-        console.log('解析B站合集/视频列表:', { url, hasLogin: !!cookies });
-        
-        // 使用multiPlatformService解析合集
-        const result = await multiPlatformService.parseBilibiliSeries(url, cookies);
-        
-        res.json(result);
-        
-    } catch (error) {
-        console.error('合集解析错误:', error);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// B站用户投稿解析
+// 用户投稿处理
 app.get('/api/bilibili/user-videos', async (req, res) => {
     try {
         const { uid } = req.query;
@@ -376,15 +347,15 @@ app.get('/api/bilibili/user-videos', async (req, res) => {
             cookies = loginSessions.get(sessionId).cookies;
         }
         
-        console.log('解析B站用户投稿:', { uid, hasLogin: !!cookies });
+        console.log('处理用户投稿:', { uid, hasLogin: !!cookies });
         
-        // 使用multiPlatformService解析用户投稿
+        // 使用multiPlatformService处理用户投稿
         const result = await multiPlatformService.parseBilibiliUserVideos(uid, cookies);
         
         res.json(result);
         
     } catch (error) {
-        console.error('用户投稿解析错误:', error);
+        console.error('用户投稿处理错误:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -399,12 +370,12 @@ app.post('/api/parse/batch', async (req, res) => {
         }
         
         if (urls.length > 50) {
-            return res.status(400).json({ success: false, error: '单次最多解析50个链接' });
+            return res.status(400).json({ success: false, error: '单次最多处理50个链接' });
         }
         
-        console.log('批量解析请求:', urls.length, '个链接');
+        console.log('批量处理请求:', urls.length, '个链接');
         
-        // 使用multiPlatformService批量解析
+        // 使用multiPlatformService批量处理
         const results = await multiPlatformService.parseMultiple(urls);
         
         res.json({
@@ -419,7 +390,7 @@ app.post('/api/parse/batch', async (req, res) => {
     }
 });
 
-// B站封面下载
+// 封面下载
 app.get('/api/bilibili/download/cover', async (req, res) => {
     try {
         const { url } = req.query;
@@ -428,20 +399,20 @@ app.get('/api/bilibili/download/cover', async (req, res) => {
             return res.status(400).json({ success: false, error: '请提供视频链接' });
         }
         
-        console.log('B站封面下载请求:', { url });
+        console.log('封面下载请求:', { url });
         
         // 使用bilibiliService下载封面
         await bilibiliService.downloadCover(url, res);
         
     } catch (error) {
-        console.error('B站封面下载错误:', error);
+        console.error('封面下载错误:', error);
         if (!res.headersSent) {
             res.status(500).json({ success: false, error: error.message });
         }
     }
 });
 
-// B站视频下载（无音频）
+// 视频下载（无音频）
 app.get('/api/bilibili/download/video-only', async (req, res) => {
     try {
         const { url, qn = 80 } = req.query;
@@ -457,13 +428,13 @@ app.get('/api/bilibili/download/video-only', async (req, res) => {
             cookies = loginSessions.get(sessionId).cookies;
         }
         
-        console.log('B站视频（无音频）下载请求:', { url, qn, hasLogin: !!cookies });
+        console.log('视频（无音频）下载请求:', { url, qn, hasLogin: !!cookies });
         
         // 使用bilibiliService下载视频（无音频）
         await bilibiliService.downloadVideoOnly(url, parseInt(qn), cookies, res);
         
     } catch (error) {
-        console.error('B站视频（无音频）下载错误:', error);
+        console.error('视频（无音频）下载错误:', error);
         if (!res.headersSent) {
             res.status(500).json({ success: false, error: error.message });
         }
@@ -523,25 +494,18 @@ app.get('/api/bilibili/stream', async (req, res) => {
             return res.status(400).json({ success: false, error: `无法获取${type === 'audio' ? '音频' : '视频'}链接` });
         }
         
-        // 音频统一转换为 MP3 格式，视频保持原始格式
-        if (type === 'audio') {
-            // 音频强制转换为 MP3
-            const targetFormat = format || 'mp3';
-            const filename = `${links.title}_audio.${targetFormat}`;
-            console.log(`音频转换为 ${targetFormat} 格式`);
-            await bilibiliService.streamWithFormat(targetUrl, res, filename, 'audio', targetFormat);
+        // 如果指定了格式，进行转换；否则使用原始格式
+        const ext = format || (type === 'audio' ? 'm4a' : 'm4s');
+        const filename = `${links.title}_${type}.${ext}`;
+        
+        if (format && format !== (type === 'audio' ? 'm4a' : 'm4s')) {
+            // 需要格式转换
+            console.log(`开始格式转换: ${type} -> ${format}`);
+            await bilibiliService.streamWithFormat(targetUrl, res, filename, type, format);
         } else {
-            // 视频：如果指定了格式则转换，否则直接代理
-            const ext = format || 'm4s';
-            const filename = `${links.title}_${type}.${ext}`;
-            
-            if (format && format !== 'm4s') {
-                console.log(`开始格式转换: ${type} -> ${format}`);
-                await bilibiliService.streamWithFormat(targetUrl, res, filename, type, format);
-            } else {
-                console.log(`直接代理下载: ${filename}`);
-                await bilibiliService.streamProxy(targetUrl, res, filename);
-            }
+            // 直接代理（原始格式）
+            console.log(`直接代理下载: ${filename}`);
+            await bilibiliService.streamProxy(targetUrl, res, filename);
         }
         
     } catch (error) {
@@ -980,17 +944,12 @@ function isValidUrl(string) {
     }
 }
 
-// 导出 app（用于 Serverless 部署）
-module.exports = app;
-
-// 如果不是作为模块导入，则启动服务器
-if (require.main === module) {
-    app.listen(PORT, () => {
-        console.log(`🚀 服务器运行在 http://localhost:${PORT}`);
-        console.log(`📱 API 端点: http://localhost:${PORT}/api/parse`);
-        console.log(`🔐 管理员密钥: ${ADMIN_KEY}`);
-    });
-}
+// 启动服务器
+app.listen(PORT, () => {
+    console.log(`🚀 服务器运行在 http://localhost:${PORT}`);
+    console.log(`📱 API 端点: http://localhost:${PORT}/api/parse`);
+    console.log(`🔐 管理员密钥: ${ADMIN_KEY}`);
+});
 
 // 错误处理
 process.on('unhandledRejection', (err) => {

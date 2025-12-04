@@ -47,36 +47,8 @@ class BilibiliService {
             'Sec-Ch-Ua-Platform': '"Windows"'
         };
         
-        // 移动端请求头（模拟真实移动浏览器）
-        this.mobileHeaders = {
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-            'Referer': 'https://m.bilibili.com/',
-            'Origin': 'https://m.bilibili.com',
-            'Accept': 'application/json, text/plain, */*',
-            'Accept-Language': 'zh-CN,zh;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Sec-Fetch-Dest': 'empty',
-            'Sec-Fetch-Mode': 'cors',
-            'Sec-Fetch-Site': 'same-site',
-            'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120"',
-            'Sec-Ch-Ua-Mobile': '?1',
-            'Sec-Ch-Ua-Platform': '"Android"'
-        };
-        
         // 生成基础Cookie（提升未登录用户画质到1080P）
         this.baseCookie = this.generateBaseCookie();
-    }
-    
-    /**
-     * 根据请求判断是否使用移动端请求头
-     */
-    getHeaders(userAgent = null) {
-        // 如果提供了UA，检测是否为移动端
-        if (userAgent) {
-            const isMobile = /Mobile|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
-            return isMobile ? this.mobileHeaders : this.headers;
-        }
-        return this.headers;
     }
     
     /**
@@ -100,8 +72,8 @@ class BilibiliService {
             `DedeUserID=`, // 空值但保留字段
             `DedeUserID__ckMd5=`, // 空值但保留字段
             `sid=${sid}`,
-            `CURRENT_QUALITY=120`,  // 设置为最高画质（4K），提升画质上限
-            `CURRENT_FNVAL=4048`,   // DASH格式，支持音视频分离
+            `CURRENT_QUALITY=80`,
+            `CURRENT_FNVAL=4048`,
             `innersign=0`,
             `b_lsid=${this.generateBLsid()}`,
             `i-wanna-go-back=-1`,
@@ -363,7 +335,7 @@ class BilibiliService {
                     bvid: bvid,
                     cid: cid,
                     qn: 120,  // 请求最高画质，API会返回所有可用画质
-                    fnval: 4048,  // DASH格式 (支持音视频分离)
+                    fnval: 4048,  // DASH格式
                     fnver: 0,
                     fourk: 1,
                     platform: 'pc',
@@ -371,7 +343,6 @@ class BilibiliService {
                     build: 6060600,
                     device: 'pc',
                     mobi_app: 'pc',
-                    try_look: 1,  // 关键参数：允许试看，可以获取更高画质（包括1080P）
                     ts: Math.floor(Date.now() / 1000)
                 };
                 
@@ -413,8 +384,7 @@ class BilibiliService {
             fnval: 4048,
             fnver: 0,
             fourk: 1,
-            platform: 'pc',
-            try_look: 1  // 允许试看，获取更高画质
+            platform: 'pc'
         };
         
         const signedParams = await this.encWbi(params, cookies);
@@ -551,10 +521,9 @@ class BilibiliService {
     }
 
     /**
-     * 使用 yt-dlp 下载（已废弃 - 总是遇到412错误）
-     * 保留方法签名以防旧代码调用，但不再实现
+     * 使用 yt-dlp 下载（优先方案，支持高画质）
      */
-    async downloadWithYtdlp_DEPRECATED(url, qn = 80, res, format = 'mp4', nameFormat = 'title') {
+    async downloadWithYtdlp(url, qn = 80, res, format = 'mp4', nameFormat = 'title') {
         try {
             // 获取视频信息用于生成文件名
             const videoInfo = await this.getVideoInfo(url, null);
@@ -608,14 +577,12 @@ class BilibiliService {
                 '-f', formatSelector,
                 '--merge-output-format', format,
                 '--no-playlist',
-                '--add-header', `User-Agent: ${userAgent}`,
-                '--add-header', `Referer: ${referer}`,
-                '--add-header', `Cookie: ${this.baseCookie}`,
-                '--add-header', 'Accept: */*',
-                '--add-header', 'Accept-Language: zh-CN,zh;q=0.9',
-                '--add-header', 'Accept-Encoding: gzip, deflate, br',
+                '--add-header', `User-Agent:${userAgent}`,
+                '--add-header', `Referer:${referer}`,
+                '--add-header', `Cookie:${this.baseCookie}`,
                 '--no-warnings',
-                '--newline',  // 每行输出一个进度信息，便于捕获错误
+                '--quiet',
+                '--progress',
                 '-o', '-',  // 输出到stdout
                 url
             ];
@@ -628,62 +595,40 @@ class BilibiliService {
             let errorOutput = '';
             let hasError = false;
             let headersSet = false;
-            let startTime = Date.now();
             
             // 使用Promise包装以便捕获错误
             return new Promise((resolve, reject) => {
-                // 监听错误输出，如果5秒后还没开始下载且有错误，则回退
+                // 先监听错误，如果立即出错就不pipe
                 const errorTimeout = setTimeout(() => {
-                    if (!headersSet && errorOutput.length > 0) {
-                        console.log(`yt-dlp 5秒内未开始下载，错误信息: ${errorOutput.substring(0, 300)}`);
-                        // 检查是否是 412 或其他 HTTP 错误
-                        if (errorOutput.includes('412') || 
-                            errorOutput.includes('Precondition Failed') ||
-                            errorOutput.includes('HTTP Error 403') ||
-                            errorOutput.includes('Unable to download')) {
-                            console.log('yt-dlp 遇到访问错误，回退到原生API');
-                            ytdlp.kill();
-                            reject(new Error('YTDLP_412_ERROR'));
-                        }
+                    // 3秒后如果还没开始输出，检查是否有错误
+                    if (errorOutput.includes('412') || errorOutput.includes('Precondition Failed')) {
+                        ytdlp.kill();
+                        reject(new Error('YTDLP_412_ERROR'));
                     }
-                }, 5000);
+                }, 3000);
                 
                 // 错误处理（在pipe之前监听）
                 ytdlp.stderr.on('data', (data) => {
                     const msg = data.toString();
                     errorOutput += msg;
-                    
-                    // 立即检测关键错误
-                    const is412Error = msg.includes('412') || msg.includes('Precondition Failed');
-                    const is403Error = msg.includes('HTTP Error 403');
-                    const isAccessError = msg.includes('Unable to download');
-                    
-                    if (is412Error || is403Error || isAccessError) {
+                    // 检查是否是412错误
+                    if (msg.includes('412') || msg.includes('Precondition Failed')) {
                         hasError = true;
-                        const errorType = is412Error ? '412' : is403Error ? '403' : 'Access';
-                        console.error(`yt-dlp 遇到${errorType}错误:`, msg.trim());
+                        console.error('yt-dlp 遇到412错误:', msg);
                         clearTimeout(errorTimeout);
                         ytdlp.kill();
-                        
                         // 如果还没设置响应头，可以安全回退
                         if (!headersSet) {
-                            console.log(`检测到${errorType}错误，回退到原生API`);
                             reject(new Error('YTDLP_412_ERROR'));
                         } else {
                             // 已经设置了响应头，无法回退
-                            console.error('响应头已发送，无法回退到原生API');
                             reject(new Error('YTDLP_ALREADY_STARTED'));
                         }
                         return;
                     }
-                    
-                    // 记录所有输出以便调试
-                    const trimmedMsg = msg.trim();
-                    if (trimmedMsg && 
-                        !trimmedMsg.includes('Deprecated') && 
-                        !trimmedMsg.includes('[download]') &&
-                        !trimmedMsg.includes('ETA')) {
-                        console.log('yt-dlp stderr:', trimmedMsg);
+                    // 只记录重要信息
+                    if (!msg.includes('[download]') && !msg.includes('ETA') && !msg.includes('of') && !msg.includes('Deprecated')) {
+                        console.log('yt-dlp:', msg.trim());
                     }
                 });
                 
@@ -697,31 +642,18 @@ class BilibiliService {
                 // 成功开始输出后设置响应头并pipe
                 ytdlp.stdout.once('data', (firstChunk) => {
                     clearTimeout(errorTimeout);
-                    const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
-                    console.log(`yt-dlp 成功开始输出数据 (耗时: ${elapsed}秒, 首块大小: ${firstChunk.length} bytes)`);
-                    
                     // 确认成功开始后设置响应头
                     if (!headersSet && !res.headersSent) {
                         res.setHeader('Content-Type', 'video/mp4');
                         res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(finalName)}.${format}"`);
-                        res.setHeader('Transfer-Encoding', 'chunked');
                         headersSet = true;
-                        console.log(`设置响应头: ${finalName}.${format}`);
                     }
-                    
                     // 发送第一个数据块
                     if (headersSet) {
                         res.write(firstChunk);
                         // 将后续输出pipe到响应
                         ytdlp.stdout.pipe(res, { end: false });
-                        
-                        let totalBytes = firstChunk.length;
-                        ytdlp.stdout.on('data', (chunk) => {
-                            totalBytes += chunk.length;
-                        });
-                        
                         ytdlp.stdout.on('end', () => {
-                            console.log(`yt-dlp 数据流结束，总计: ${(totalBytes / 1024 / 1024).toFixed(2)} MB`);
                             res.end();
                         });
                     }
@@ -729,35 +661,20 @@ class BilibiliService {
                 
                 ytdlp.on('close', (code) => {
                     clearTimeout(errorTimeout);
-                    const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
-                    
                     if (code !== 0 || hasError) {
-                        console.error(`yt-dlp 进程结束，退出码: ${code}, 耗时: ${totalTime}秒`);
-                        console.error(`错误输出: ${errorOutput.substring(0, 500)}`);
-                        
-                        // 检查是否是可以回退的错误
-                        const canFallback = (
-                            errorOutput.includes('412') || 
-                            errorOutput.includes('Precondition Failed') ||
-                            errorOutput.includes('HTTP Error 403') ||
-                            errorOutput.includes('Unable to download')
-                        ) && !headersSet;
-                        
-                        if (canFallback) {
-                            console.log('yt-dlp 遇到访问错误且未开始传输，回退到原生API');
+                        console.error(`yt-dlp 退出码: ${code}, 错误输出: ${errorOutput.substring(0, 200)}`);
+                        // 如果是412错误且还没设置响应头，可以回退
+                        if ((errorOutput.includes('412') || errorOutput.includes('Precondition Failed')) && !headersSet) {
+                            console.log('yt-dlp 遇到412错误，回退到原生API');
                             reject(new Error('YTDLP_412_ERROR'));
                             return;
                         }
-                        
                         if (!headersSet && !res.headersSent) {
-                            res.status(500).json({ 
-                                success: false, 
-                                error: `yt-dlp 下载失败: ${errorOutput.substring(0, 200)}` 
-                            });
+                            res.status(500).json({ success: false, error: `yt-dlp 下载失败: ${errorOutput.substring(0, 200)}` });
                         }
                         reject(new Error(`yt-dlp 下载失败，退出码: ${code}`));
                     } else {
-                        console.log(`yt-dlp 下载成功完成，总耗时: ${totalTime}秒`);
+                        console.log('yt-dlp 下载完成');
                         if (!headersSet && !res.headersSent) {
                             res.setHeader('Content-Type', 'video/mp4');
                             res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(finalName)}.${format}"`);
@@ -803,8 +720,33 @@ class BilibiliService {
                 throw new Error('响应头已发送，无法继续下载');
             }
             
-            // 直接使用原生API下载（yt-dlp已废弃，总是遇到412错误）
-            console.log('使用原生API下载');
+            // 优先使用 yt-dlp 下载（支持高画质且更稳定）
+            const ytdlpCheck = await ytdlpService.checkAvailable();
+            if (ytdlpCheck.available) {
+                try {
+                    console.log('使用 yt-dlp 下载（优先方案）');
+                    return await this.downloadWithYtdlp(url, qn, res, format, nameFormat);
+                } catch (error) {
+                    // 如果yt-dlp失败（如412错误），检查是否可以回退
+                    if (error.message === 'YTDLP_412_ERROR') {
+                        // 如果响应头还没发送，可以回退
+                        if (!res.headersSent) {
+                            console.log('yt-dlp 遇到412错误，回退到原生API下载');
+                        } else {
+                            // 响应头已发送，无法回退，直接抛出错误
+                            console.error('yt-dlp 已开始下载但失败，无法回退');
+                            throw new Error('yt-dlp 下载失败且无法回退');
+                        }
+                    } else if (error.message === 'YTDLP_ALREADY_STARTED') {
+                        // 已经开始下载但失败，无法回退
+                        throw new Error('yt-dlp 下载已开始但失败');
+                    } else {
+                        throw error; // 其他错误直接抛出
+                    }
+                }
+            }
+            
+            console.log('yt-dlp 不可用，使用原生API下载');
             
             // 获取视频信息
             const videoInfo = await this.getVideoInfo(url, cookies);
@@ -1137,39 +1079,47 @@ class BilibiliService {
             console.log('下载音频流...');
             await this.downloadFile(audioUrl, audioFile);
             
-            // 检查 ffmpeg（必须有才能转换为 MP3）
+            // 检查 ffmpeg 并转换为 MP3
             const hasFfmpeg = await this.checkFfmpeg();
-            if (!hasFfmpeg) {
+            if (hasFfmpeg) {
+                console.log('转换音频为 MP3...');
+                await this.convertToMp3(audioFile, outputFile);
+                
                 // 清理临时文件
                 try {
                     fs.unlinkSync(audioFile);
                 } catch (e) {}
-                throw new Error('音频下载需要 ffmpeg 支持，请安装 ffmpeg 后重试');
+                
+                // 发送转换后的文件
+                const stats = fs.statSync(outputFile);
+                res.setHeader('Content-Type', 'audio/mpeg');
+                res.setHeader('Content-Length', stats.size);
+                res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeTitle)}.mp3"`);
+                
+                const fileStream = fs.createReadStream(outputFile);
+                fileStream.pipe(res);
+                
+                fileStream.on('end', () => {
+                    setTimeout(() => {
+                        try { fs.unlinkSync(outputFile); } catch (e) {}
+                    }, 5000);
+                });
+            } else {
+                // 如果没有 ffmpeg，直接发送 m4s 文件
+                const stats = fs.statSync(audioFile);
+                res.setHeader('Content-Type', 'audio/mp4');
+                res.setHeader('Content-Length', stats.size);
+                res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeTitle)}.m4s"`);
+                
+                const fileStream = fs.createReadStream(audioFile);
+                fileStream.pipe(res);
+                
+                fileStream.on('end', () => {
+                    setTimeout(() => {
+                        try { fs.unlinkSync(audioFile); } catch (e) {}
+                    }, 5000);
+                });
             }
-            
-            // 转换音频为 MP3（统一格式）
-            console.log('转换音频为 MP3...');
-            await this.convertToMp3(audioFile, outputFile);
-            
-            // 清理临时文件
-            try {
-                fs.unlinkSync(audioFile);
-            } catch (e) {}
-            
-            // 发送转换后的 MP3 文件
-            const stats = fs.statSync(outputFile);
-            res.setHeader('Content-Type', 'audio/mpeg');
-            res.setHeader('Content-Length', stats.size);
-            res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeTitle)}.mp3"`);
-            
-            const fileStream = fs.createReadStream(outputFile);
-            fileStream.pipe(res);
-            
-            fileStream.on('end', () => {
-                setTimeout(() => {
-                    try { fs.unlinkSync(outputFile); } catch (e) {}
-                }, 5000);
-            });
             
         } catch (error) {
             console.error('B站音频下载失败:', error);

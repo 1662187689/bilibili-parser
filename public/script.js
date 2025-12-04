@@ -28,8 +28,7 @@ let isLoggedIn = false;
 let isVip = false;
 let userInfo = null;
 let qrCheckInterval = null;
-let batchResults = []; // 批量解析结果
-let selectedBatchItems = new Set(); // 选中的批量项目索引
+let batchResults = []; // 批量处理结果
 let gistAnnouncementData = null; // Gist 公告数据
 
 // 预设选项（兼容）
@@ -114,7 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
     checkLoginStatus();
     checkLogin(); // 新 HTML 使用这个函数
     
-    // 恢复上次的解析搜索结果（保持登录/退出后的状态）
+    // 恢复上次的处理搜索结果（保持登录/退出后的状态）
     restoreLastParseResult();
     
     // 加载历史记录到下拉菜单
@@ -211,7 +210,7 @@ function selectPresetQuality(qn, element) {
     // 检查是否需要登录
     const needVip = qn > 80;
     if (needVip && !isLoggedIn) {
-        showToast('请先登录B站账号', 'error');
+        showToast('请先登录网站账号', 'error');
         showLoginModal();
         return;
     }
@@ -307,7 +306,7 @@ function updatePresetInfoDisplay() {
 // 使用预设下载（单视频）
 async function downloadWithPreset() {
     if (!currentVideoData) {
-        showToast('请先解析视频', 'error');
+        showToast('请先处理视频', 'error');
         return;
     }
 
@@ -362,9 +361,8 @@ async function downloadWithPreset() {
             const videoDownloadUrl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${qn}&type=video`;
             triggerBrowserDownload(videoDownloadUrl, `${finalName}_video.m4s`);
             setTimeout(() => {
-                const audioFormat = appState.audioFormat || 'mp3';
-                const audioDownloadUrl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${qn}&type=audio&format=${audioFormat}`;
-                triggerBrowserDownload(audioDownloadUrl, `${finalName}_audio.${audioFormat}`);
+                const audioDownloadUrl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${qn}&type=audio`;
+                triggerBrowserDownload(audioDownloadUrl, `${finalName}_audio.m4a`);
             }, 1000);
         } else {
             // 完整视频：传递命名格式给后端
@@ -384,166 +382,17 @@ async function downloadWithPreset() {
     }
 }
 
-// 触发浏览器下载（带进度显示）
-async function triggerBrowserDownload(url, filename) {
-    try {
-        // 显示下载进度 UI
-        showDownloadProgress(filename);
-        
-        // 使用 fetch 下载并显示进度
-        const response = await fetch(url);
-        const contentLength = response.headers.get('Content-Length');
-        const total = parseInt(contentLength, 10);
-        
-        if (!response.ok) {
-            throw new Error(`下载失败: ${response.status} ${response.statusText}`);
-        }
-        
-        const reader = response.body.getReader();
-        const chunks = [];
-        let receivedLength = 0;
-        let startTime = Date.now();
-        
-        while (true) {
-            const {done, value} = await reader.read();
-            
-            if (done) break;
-            
-            chunks.push(value);
-            receivedLength += value.length;
-            
-            // 更新进度
-            if (total) {
-                const progress = (receivedLength / total) * 100;
-                const elapsed = (Date.now() - startTime) / 1000; // 秒
-                const speed = receivedLength / elapsed / 1024 / 1024; // MB/s
-                const remaining = (total - receivedLength) / (speed * 1024 * 1024); // 秒
-                
-                updateDownloadProgress(progress, speed, remaining);
-            } else {
-                // 无法获取总大小时，只显示已下载量和速度
-                const elapsed = (Date.now() - startTime) / 1000;
-                const speed = receivedLength / elapsed / 1024 / 1024;
-                updateDownloadProgress(null, speed, null, receivedLength);
-            }
-        }
-        
-        // 合并数据块
-        const blob = new Blob(chunks);
-        const blobUrl = URL.createObjectURL(blob);
-        
-        // 触发下载
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = filename;
-        link.style.display = 'none';
-        document.body.appendChild(link);
-        link.click();
-        
-        // 清理
-        setTimeout(() => {
-            document.body.removeChild(link);
-            URL.revokeObjectURL(blobUrl);
-            hideDownloadProgress();
+// 触发浏览器下载
+function triggerBrowserDownload(url, filename) {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => {
+        document.body.removeChild(link);
         }, 100);
-        
-        showToast('下载完成！', 'success');
-        
-    } catch (error) {
-        console.error('下载失败:', error);
-        hideDownloadProgress();
-        showToast('下载失败: ' + error.message, 'error');
-        
-        // 回退到原生下载方式
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        link.style.display = 'none';
-        document.body.appendChild(link);
-        link.click();
-        setTimeout(() => document.body.removeChild(link), 100);
-    }
-}
-
-// 显示下载进度 UI
-function showDownloadProgress(filename) {
-    // 检查是否已存在进度框
-    let progressBox = document.getElementById('downloadProgressBox');
-    if (!progressBox) {
-        progressBox = document.createElement('div');
-        progressBox.id = 'downloadProgressBox';
-        progressBox.innerHTML = `
-            <div class="download-progress-content">
-                <div class="progress-header">
-                    <i class="fas fa-download"></i>
-                    <span class="progress-filename"></span>
-                    <button class="progress-close" onclick="hideDownloadProgress()">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-                <div class="progress-bar-container">
-                    <div class="progress-bar" style="width: 0%"></div>
-                </div>
-                <div class="progress-info">
-                    <span class="progress-percent">0%</span>
-                    <span class="progress-speed">-- MB/s</span>
-                    <span class="progress-remaining">计算中...</span>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(progressBox);
-    }
-    
-    progressBox.querySelector('.progress-filename').textContent = filename;
-    progressBox.style.display = 'block';
-    setTimeout(() => progressBox.classList.add('show'), 10);
-}
-
-// 更新下载进度
-function updateDownloadProgress(progress, speed, remaining, downloaded) {
-    const progressBox = document.getElementById('downloadProgressBox');
-    if (!progressBox) return;
-    
-    if (progress !== null) {
-        progressBox.querySelector('.progress-bar').style.width = progress.toFixed(1) + '%';
-        progressBox.querySelector('.progress-percent').textContent = progress.toFixed(1) + '%';
-    } else {
-        progressBox.querySelector('.progress-percent').textContent = formatFileSize(downloaded);
-    }
-    
-    progressBox.querySelector('.progress-speed').textContent = speed.toFixed(2) + ' MB/s';
-    
-    if (remaining !== null && remaining > 0) {
-        const min = Math.floor(remaining / 60);
-        const sec = Math.floor(remaining % 60);
-        progressBox.querySelector('.progress-remaining').textContent = 
-            min > 0 ? `剩余 ${min}分${sec}秒` : `剩余 ${sec}秒`;
-    } else if (progress === null) {
-        progressBox.querySelector('.progress-remaining').textContent = '未知大小';
-    }
-}
-
-// 隐藏下载进度
-function hideDownloadProgress() {
-    const progressBox = document.getElementById('downloadProgressBox');
-    if (progressBox) {
-        progressBox.classList.remove('show');
-        setTimeout(() => {
-            progressBox.style.display = 'none';
-            // 重置进度
-            progressBox.querySelector('.progress-bar').style.width = '0%';
-            progressBox.querySelector('.progress-percent').textContent = '0%';
-        }, 300);
-    }
-}
-
-// 格式化文件大小
-function formatFileSize(bytes) {
-    if (!bytes || bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
 }
 
 // ==================== 设置功能 ====================
@@ -662,7 +511,7 @@ function updateInputHint() {
     if (!hintEl) return;
     
     if (!input) {
-        hintEl.innerHTML = '<i class="fas fa-info-circle"></i> <span>粘贴B站链接、收藏夹ID或多个链接自动识别</span>';
+            hintEl.innerHTML = '<i class="fas fa-info-circle"></i> <span>粘贴视频链接、收藏夹ID或多个链接自动识别</span>';
         if (linkCountEl) linkCountEl.classList.add('hidden');
         return;
     }
@@ -679,16 +528,16 @@ function updateInputHint() {
             if (linkCountEl) linkCountEl.classList.add('hidden');
             break;
         case 'multi':
-            hintEl.innerHTML = `<i class="fas fa-list" style="color: var(--primary-color);"></i> <span>检测到多个链接，将批量解析</span>`;
+            hintEl.innerHTML = `<i class="fas fa-list" style="color: var(--primary-color);"></i> <span>检测到多个链接，将批量处理</span>`;
             if (linkCountEl) linkCountEl.classList.remove('hidden');
             if (linkNumEl) linkNumEl.textContent = inputType.urls.length;
             break;
         case 'single':
-            hintEl.innerHTML = `<i class="fab fa-bilibili" style="color: var(--bilibili-pink);"></i> <span>检测到B站视频链接</span>`;
+            hintEl.innerHTML = `<i class="fas fa-video" style="color: var(--bilibili-pink);"></i> <span>检测到视频链接</span>`;
             if (linkCountEl) linkCountEl.classList.add('hidden');
             break;
         default:
-            hintEl.innerHTML = `<i class="fas fa-question-circle" style="color: var(--warning-color);"></i> <span>请输入B站视频链接、收藏夹或UP主主页</span>`;
+            hintEl.innerHTML = `<i class="fas fa-question-circle" style="color: var(--warning-color);"></i> <span>请输入视频链接、收藏夹或用户主页</span>`;
             if (linkCountEl) linkCountEl.classList.add('hidden');
     }
 }
@@ -730,7 +579,7 @@ function detectInputType(input) {
     return { type: 'unknown' };
 }
 
-// 提取B站链接 - 支持换行、空格、逗号等分隔，以及连在一起的多个链接
+// 提取视频链接 - 支持换行、空格、逗号等分隔，以及连在一起的多个链接
 function extractBilibiliUrls(text) {
     const urls = new Set();
     
@@ -767,7 +616,7 @@ async function handleSmartParse() {
     const input = videoUrlInput.value.trim();
     
     if (!input) {
-        showToast('请输入B站链接或收藏夹ID', 'error');
+        showToast('请输入视频链接或收藏夹ID', 'error');
         videoUrlInput.focus();
         return;
     }
@@ -797,7 +646,7 @@ async function handleSmartParse() {
                     await handleMultiParse(urls);
                 }
             } else {
-                showToast('无法识别输入内容，请检查是否为B站链接', 'error');
+                showToast('无法识别输入内容，请检查是否为视频链接', 'error');
             }
     }
 }
@@ -809,7 +658,7 @@ async function handleSingleParse(url) {
     resultSection.classList.add('hidden');
     document.getElementById('batchResultSection')?.classList.add('hidden');
     errorSection.classList.add('hidden');
-    document.getElementById('loadingText').textContent = '正在解析中，请稍候...';
+    document.getElementById('loadingText').textContent = '正在处理中，请稍候...';
     document.getElementById('loadingProgress')?.classList.add('hidden');
     parseBtn.disabled = true;
 
@@ -826,7 +675,7 @@ async function handleSingleParse(url) {
             currentVideoData = data.data;
             displayResult(data.data);
         } else {
-            throw new Error(data.error || '解析失败');
+            throw new Error(data.error || '处理失败');
         }
     } catch (error) {
         showError(error.message);
@@ -836,7 +685,7 @@ async function handleSingleParse(url) {
     }
 }
 
-// ==================== 批量解析 ====================
+// ==================== 批量处理 ====================
 
 async function handleMultiParse(urls) {
     if (!urls || urls.length === 0) {
@@ -845,7 +694,7 @@ async function handleMultiParse(urls) {
     }
     
     if (urls.length > 50) {
-        showToast('单次最多解析50个链接', 'error');
+        showToast('单次最多处理50个链接', 'error');
         return;
     }
     
@@ -855,7 +704,7 @@ async function handleMultiParse(urls) {
     document.getElementById('batchResultSection')?.classList.add('hidden');
     errorSection.classList.add('hidden');
     
-    document.getElementById('loadingText').textContent = '正在批量解析中...';
+    document.getElementById('loadingText').textContent = '正在批量处理中...';
     const progressEl = document.getElementById('loadingProgress');
     if (progressEl) progressEl.classList.remove('hidden');
     
@@ -893,7 +742,7 @@ async function handleMultiParse(urls) {
                 batchResults.push({
                     success: false,
                     url: urls[i],
-                    error: data.error || '解析失败'
+                    error: data.error || '处理失败'
                 });
                 failedCount++;
         }
@@ -921,7 +770,7 @@ async function handleMultiParse(urls) {
     displayBatchResults(successCount, failedCount);
 }
 
-// 显示批量解析结果（适配新 HTML，带复选框）
+// 显示批量处理结果（适配新 HTML）
 function displayBatchResults(successCount, failedCount) {
     // 尝试新 HTML 的元素 ID，如果不存在则使用旧的
     const batchSectionEl = document.getElementById('batchSection') || document.getElementById('batchResultSection');
@@ -934,10 +783,6 @@ function displayBatchResults(successCount, failedCount) {
     if (resultSection) resultSection.classList.add('hidden');
     
     if (!batchListEl) return;
-    
-    // 清空选中状态
-    selectedBatchItems.clear();
-    updateBatchSelectionCount();
     
     batchListEl.innerHTML = '';
     
@@ -957,13 +802,10 @@ function displayBatchResults(successCount, failedCount) {
             }
             
             item.innerHTML = `
-                <div class="batch-checkbox-container">
-                    <input type="checkbox" class="batch-checkbox" data-index="${index}" onchange="toggleBatchSelection(${index})">
-                </div>
                 <img class="batch-thumb" src="${thumbnailUrl || 'data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 9\"><rect fill=\"%23334155\" width=\"16\" height=\"9\"/></svg>'}">
                 <div class="batch-info">
                     <div class="batch-title">${escapeHtml(data.title || '未知标题')}</div>
-                    <div class="batch-status success"><i class="fas fa-check"></i> 解析成功</div>
+                    <div class="batch-status success"><i class="fas fa-check"></i> 处理成功</div>
                 </div>
                 <button onclick="downloadBatchItem(${index})" style="background:var(--primary); color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">
                     <i class="fas fa-download"></i>
@@ -971,9 +813,6 @@ function displayBatchResults(successCount, failedCount) {
             `;
         } else {
             item.innerHTML = `
-                <div class="batch-checkbox-container" style="visibility: hidden;">
-                    <input type="checkbox" class="batch-checkbox" disabled>
-                </div>
                 <div class="batch-info">
                     <div class="batch-title">${escapeHtml(result.url)}</div>
                     <div class="batch-status error"><i class="fas fa-times"></i> ${escapeHtml(result.error)}</div>
@@ -992,110 +831,13 @@ function displayBatchResults(successCount, failedCount) {
         batchSectionEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
     
-    // 禁用自动下载（现在需要手动选择）
-    // if (appSettings && appSettings.autoDownload && successCount > 0) {
-    //     setTimeout(() => downloadAllBatch(), 500);
-    // }
-}
-
-// 切换批量项目的选中状态
-function toggleBatchSelection(index) {
-    const checkbox = document.querySelector(`.batch-checkbox[data-index="${index}"]`);
-    if (!checkbox) return;
-    
-    if (checkbox.checked) {
-        // 检查是否超过5个
-        if (selectedBatchItems.size >= 5) {
-            checkbox.checked = false;
-            showToast('最多只能选择5个视频同时下载，防止服务器超负荷', 'warning');
-            return;
-        }
-        selectedBatchItems.add(index);
-    } else {
-        selectedBatchItems.delete(index);
-    }
-    
-    updateBatchSelectionCount();
-}
-
-// 全选批量项目（最多5个）
-function selectAllBatch() {
-    selectedBatchItems.clear();
-    const checkboxes = document.querySelectorAll('.batch-checkbox:not([disabled])');
-    let count = 0;
-    
-    checkboxes.forEach((checkbox, idx) => {
-        if (count < 5) {
-            const index = parseInt(checkbox.dataset.index);
-            checkbox.checked = true;
-            selectedBatchItems.add(index);
-            count++;
-        } else {
-            checkbox.checked = false;
-        }
-    });
-    
-    updateBatchSelectionCount();
-    
-    if (checkboxes.length > 5) {
-        showToast('已选择前5个视频（防止服务器超负荷）', 'success');
-    } else {
-        showToast(`已全选 ${selectedBatchItems.size} 个视频`, 'success');
+    // 如果设置了自动下载
+    if (appSettings && appSettings.autoDownload && successCount > 0) {
+        setTimeout(() => downloadAllBatch(), 500);
     }
 }
 
-// 反选批量项目（最多5个）
-function invertBatchSelection() {
-    const checkboxes = document.querySelectorAll('.batch-checkbox:not([disabled])');
-    const newSelection = new Set();
-    let count = 0;
-    
-    checkboxes.forEach((checkbox) => {
-        const index = parseInt(checkbox.dataset.index);
-        const shouldSelect = !selectedBatchItems.has(index) && count < 5;
-        
-        if (shouldSelect) {
-            checkbox.checked = true;
-            newSelection.add(index);
-            count++;
-        } else {
-            checkbox.checked = false;
-        }
-    });
-    
-    selectedBatchItems = newSelection;
-    updateBatchSelectionCount();
-    
-    if (count >= 5) {
-        showToast('已反选（最多5个）', 'success');
-    } else {
-        showToast(`已反选 ${selectedBatchItems.size} 个视频`, 'success');
-    }
-}
-
-// 清空批量选择
-function clearBatchSelection() {
-    selectedBatchItems.clear();
-    document.querySelectorAll('.batch-checkbox').forEach(cb => cb.checked = false);
-    updateBatchSelectionCount();
-    showToast('已清空选择', 'success');
-}
-
-// 更新批量选择计数显示
-function updateBatchSelectionCount() {
-    const downloadAllBtn = document.getElementById('downloadAllBtn');
-    if (downloadAllBtn) {
-        if (selectedBatchItems.size > 0) {
-            downloadAllBtn.innerHTML = `<i class="fas fa-download"></i> 下载选中 (${selectedBatchItems.size})`;
-            downloadAllBtn.disabled = false;
-        } else {
-            downloadAllBtn.innerHTML = `<i class="fas fa-download"></i> 下载选中`;
-            downloadAllBtn.disabled = true;
-        }
-    }
-}
-
-// 下载批量解析的单个项目
+// 下载批量处理的单个项目
 async function downloadBatchItem(index) {
     const result = batchResults[index];
     if (!result || !result.success) return;
@@ -1119,7 +861,7 @@ async function downloadBatchItem(index) {
         
         try {
             if (format === 'audio') {
-                const downloadUrl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${quality}&type=audio&format=${audioFormat}`;
+                const downloadUrl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${quality}&type=audio`;
                 triggerBrowserDownload(downloadUrl, `${safeTitle}.${audioFormat}`);
             } else if (format === 'cover') {
                 const downloadUrl = `${API_BASE_URL}/api/bilibili/download/cover?url=${encodedUrl}`;
@@ -1187,7 +929,7 @@ async function retryBatchItem(index) {
                 url: result.url,
                 data: data.data
             };
-            showToast('解析成功！', 'success');
+            showToast('处理成功！', 'success');
             
             // 更新列表项
             if (batchListEl && batchListEl.children[index]) {
@@ -1199,13 +941,10 @@ async function retryBatchItem(index) {
                 }
                 
                 batchListEl.children[index].innerHTML = `
-                    <div class="batch-checkbox-container">
-                        <input type="checkbox" class="batch-checkbox" data-index="${index}" onchange="toggleBatchSelection(${index})">
-                    </div>
                     <img class="batch-thumb" src="${thumbnailUrl || 'data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 9\"><rect fill=\"%23334155\" width=\"16\" height=\"9\"/></svg>'}">
                     <div class="batch-info">
                         <div class="batch-title">${escapeHtml(resultData.title || '未知标题')}</div>
-                        <div class="batch-status success"><i class="fas fa-check"></i> 解析成功</div>
+                        <div class="batch-status success"><i class="fas fa-check"></i> 处理成功</div>
                     </div>
                     <button onclick="downloadBatchItem(${index})" style="background:var(--primary); color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">
                         <i class="fas fa-download"></i>
@@ -1216,7 +955,7 @@ async function retryBatchItem(index) {
             batchResults[index] = {
                 success: false,
                 url: result.url,
-                error: data.error || '解析失败'
+                error: data.error || '处理失败'
             };
             showToast('解析仍然失败', 'error');
             
@@ -1225,7 +964,7 @@ async function retryBatchItem(index) {
                 batchListEl.children[index].innerHTML = `
                     <div class="batch-info">
                         <div class="batch-title">${escapeHtml(result.url)}</div>
-                        <div class="batch-status error"><i class="fas fa-times"></i> ${escapeHtml(data.error || '解析失败')}</div>
+                        <div class="batch-status error"><i class="fas fa-times"></i> ${escapeHtml(data.error || '处理失败')}</div>
                     </div>
                     <button onclick="retryBatchItem(${index})" style="background:var(--blue); color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">
                         <i class="fas fa-redo"></i>
@@ -1260,25 +999,18 @@ async function retryBatchItem(index) {
     }
 }
 
-// 下载选中的批量项目
+// 全部下载
 async function downloadAllBatch() {
-    // 获取选中的成功项
+    // 获取成功项及其原始索引
     const successItems = [];
-    
-    if (selectedBatchItems.size === 0) {
-        showToast('请先选择要下载的视频（最多5个）', 'warning');
-        return;
-    }
-    
-    selectedBatchItems.forEach(idx => {
-        const result = batchResults[idx];
-        if (result && result.success) {
-            successItems.push({ ...result, originalIndex: idx });
+    batchResults.forEach((r, idx) => {
+        if (r.success) {
+            successItems.push({ ...r, originalIndex: idx });
         }
     });
     
     if (successItems.length === 0) {
-        showToast('选中的项目中没有可下载的', 'error');
+        showToast('没有可下载的项目', 'error');
         return;
     }
     
@@ -1325,7 +1057,7 @@ async function downloadAllBatch() {
             const audioFormat = appState.audioFormat || 'mp3';
             
             if (format === 'audio') {
-                const downloadUrl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${quality}&type=audio&format=${audioFormat}`;
+                const downloadUrl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${quality}&type=audio`;
                 triggerBrowserDownload(downloadUrl, `${safeTitle}.${audioFormat}`);
             } else if (format === 'cover') {
                 const downloadUrl = `${API_BASE_URL}/api/bilibili/download/cover?url=${encodedUrl}`;
@@ -1459,7 +1191,7 @@ function clearBatchResults() {
     showToast('已清空', 'success');
 }
 
-// ==================== 收藏夹解析 ====================
+// ==================== 收藏夹处理 ====================
 
 async function handleFavoritesParse(favId) {
     if (!favId) {
@@ -1475,7 +1207,7 @@ async function handleFavoritesParse(favId) {
     if (errorSection) errorSection.classList.add('hidden');
     
     const loadingTextEl = document.getElementById('loadingText');
-    if (loadingTextEl) loadingTextEl.textContent = '正在解析收藏夹...';
+    if (loadingTextEl) loadingTextEl.textContent = '正在处理收藏夹...';
     const progressEl = document.getElementById('loadingProgress');
     if (progressEl) progressEl.classList.add('hidden');
     
@@ -1510,11 +1242,6 @@ async function handleFavoritesParse(favId) {
             
             if (batchSectionEl) batchSectionEl.classList.remove('hidden');
             if (resultSection) resultSection.classList.add('hidden');
-            
-            // 清空选中状态
-            selectedBatchItems.clear();
-            updateBatchSelectionCount();
-            
             if (batchListEl) {
                 batchListEl.innerHTML = '';
                 batchResults.forEach((result, index) => {
@@ -1528,13 +1255,10 @@ async function handleFavoritesParse(favId) {
                         thumbnailUrl = `${API_BASE_URL}/api/proxy/image?url=${encodeURIComponent(thumbnailUrl)}`;
                     }
                     item.innerHTML = `
-                        <div class="batch-checkbox-container">
-                            <input type="checkbox" class="batch-checkbox" data-index="${index}" onchange="toggleBatchSelection(${index})">
-                        </div>
                         <img class="batch-thumb" src="${thumbnailUrl || 'data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 9\"><rect fill=\"%23334155\" width=\"16\" height=\"9\"/></svg>'}">
                         <div class="batch-info">
                             <div class="batch-title">${escapeHtml(data.title || '未知标题')}</div>
-                            <div class="batch-status success"><i class="fas fa-check"></i> 解析成功</div>
+                            <div class="batch-status success"><i class="fas fa-check"></i> 处理成功</div>
                         </div>
                         <button onclick="downloadBatchItem(${index})" style="background:var(--primary); color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">
                             <i class="fas fa-download"></i>
@@ -1558,7 +1282,7 @@ async function handleFavoritesParse(favId) {
     }
 }
 
-// ==================== UP主投稿解析 ====================
+// ==================== 用户投稿处理 ====================
 
 async function handleUserVideosParse(uid) {
     if (!uid) {
@@ -1609,11 +1333,6 @@ async function handleUserVideosParse(uid) {
             
             if (batchSectionEl) batchSectionEl.classList.remove('hidden');
             if (resultSection) resultSection.classList.add('hidden');
-            
-            // 清空选中状态
-            selectedBatchItems.clear();
-            updateBatchSelectionCount();
-            
             if (batchListEl) {
                 batchListEl.innerHTML = '';
                 batchResults.forEach((result, index) => {
@@ -1627,13 +1346,10 @@ async function handleUserVideosParse(uid) {
                         thumbnailUrl = `${API_BASE_URL}/api/proxy/image?url=${encodeURIComponent(thumbnailUrl)}`;
                     }
                     item.innerHTML = `
-                        <div class="batch-checkbox-container">
-                            <input type="checkbox" class="batch-checkbox" data-index="${index}" onchange="toggleBatchSelection(${index})">
-                        </div>
                         <img class="batch-thumb" src="${thumbnailUrl || 'data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 9\"><rect fill=\"%23334155\" width=\"16\" height=\"9\"/></svg>'}">
                         <div class="batch-info">
                             <div class="batch-title">${escapeHtml(data.title || '未知标题')}</div>
-                            <div class="batch-status success"><i class="fas fa-check"></i> 解析成功</div>
+                            <div class="batch-status success"><i class="fas fa-check"></i> 处理成功</div>
                         </div>
                         <button onclick="downloadBatchItem(${index})" style="background:var(--primary); color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">
                             <i class="fas fa-download"></i>
@@ -1839,14 +1555,6 @@ async function checkLoginStatus() {
 }
 
 function updateLoginUI() {
-    // 适配新HTML的元素ID
-    const loginBtnArea = document.getElementById('loginBtnArea');
-    const userInfoArea = document.getElementById('userInfoArea');
-    const headerAvatar = document.getElementById('headerAvatar');
-    const headerName = document.getElementById('headerName');
-    const headerVipBadge = document.getElementById('headerVipBadge');
-    
-    // 兼容旧HTML的元素ID
     const loginStatus = document.getElementById('loginStatus');
     const userInfoEl = document.getElementById('userInfo');
     const userAvatar = document.getElementById('userAvatar');
@@ -1854,13 +1562,8 @@ function updateLoginUI() {
     const userVip = document.getElementById('userVip');
     
     if (isLoggedIn && userInfo) {
-        // 新HTML
-        if (loginBtnArea) loginBtnArea.classList.add('hidden');
-        if (userInfoArea) userInfoArea.classList.remove('hidden');
-        
-        // 旧HTML
-        if (loginStatus) loginStatus.classList.add('hidden');
-        if (userInfoEl) userInfoEl.classList.remove('hidden');
+        loginStatus.classList.add('hidden');
+        userInfoEl.classList.remove('hidden');
         
         // 处理头像URL
         let avatarUrl = userInfo.avatar || '';
@@ -1875,42 +1578,22 @@ function updateLoginUI() {
             }
         }
         
-        const defaultAvatar = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="%23ccc"/><text x="12" y="16" text-anchor="middle" fill="%23999" font-size="12">头像</text></svg>';
+        userAvatar.src = avatarUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="%23ccc"/><text x="12" y="16" text-anchor="middle" fill="%23999" font-size="12">头像</text></svg>';
+        userAvatar.onerror = function() {
+            // 头像加载失败时使用默认头像
+            this.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="%23ccc"/><text x="12" y="16" text-anchor="middle" fill="%23999" font-size="12">头像</text></svg>';
+        };
         
-        // 新HTML头像
-        if (headerAvatar) {
-            headerAvatar.src = avatarUrl || defaultAvatar;
-            headerAvatar.onerror = function() {
-                this.src = defaultAvatar;
-            };
-        }
+        userName.textContent = userInfo.name || '用户';
         
-        // 旧HTML头像
-        if (userAvatar) {
-            userAvatar.src = avatarUrl || defaultAvatar;
-            userAvatar.onerror = function() {
-                this.src = defaultAvatar;
-            };
-        }
-        
-        // 用户名
-        if (headerName) headerName.textContent = userInfo.name || '用户';
-        if (userName) userName.textContent = userInfo.name || '用户';
-        
-        // VIP徽章
         if (isVip) {
-            if (headerVipBadge) headerVipBadge.classList.remove('hidden');
-            if (userVip) userVip.classList.remove('hidden');
+            userVip.classList.remove('hidden');
         } else {
-            if (headerVipBadge) headerVipBadge.classList.add('hidden');
-            if (userVip) userVip.classList.add('hidden');
+            userVip.classList.add('hidden');
         }
     } else {
-        // 未登录状态
-        if (loginBtnArea) loginBtnArea.classList.remove('hidden');
-        if (userInfoArea) userInfoArea.classList.add('hidden');
-        if (loginStatus) loginStatus.classList.remove('hidden');
-        if (userInfoEl) userInfoEl.classList.add('hidden');
+        loginStatus.classList.remove('hidden');
+        userInfoEl.classList.add('hidden');
     }
     
     // 更新预设选项中的VIP状态
@@ -2277,7 +1960,7 @@ function generateQualityList(result) {
                 if (!exists) {
                     showToast('此视频不支持该画质', 'error');
                 } else if (needVip && !isLoggedIn) {
-                    showToast('请先登录B站账号', 'error');
+                    showToast('请先登录网站账号', 'error');
                     showLoginModal();
                 } else if (needVip && !isVip) {
                     showToast('此画质需要大会员，请登录大会员账号', 'error');
@@ -2407,7 +2090,7 @@ function selectQuality(element, qn) {
 // 下载选中的格式和画质
 async function downloadSelected() {
     if (!currentVideoData) {
-        showToast('请先解析视频', 'error');
+        showToast('请先处理视频', 'error');
         return;
     }
 
@@ -2442,7 +2125,7 @@ async function downloadSelected() {
                     if (!exists) {
                         showToast('此视频不支持该画质', 'error');
                     } else if (needVip && !isLoggedIn) {
-                        showToast('请先登录B站账号', 'error');
+                        showToast('请先登录网站账号', 'error');
                         showLoginModal();
                     } else if (needVip && !isVip) {
                         showToast('此画质需要大会员，请登录大会员账号', 'error');
@@ -2480,13 +2163,13 @@ async function downloadSelected() {
             
             // 延迟下载音频
             setTimeout(() => {
-                const audioUrl_dl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${qn}&type=audio&format=${audioFormat}`;
+                const audioUrl_dl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${qn}&type=audio`;
                 downloadFile(audioUrl_dl, `${safeTitle}_audio.${audioFormat}`);
             }, 1000);
         } else if (selectedFormat === 'audio') {
             // 下载音频 - 使用选择的音频格式
             const audioFormat = appState.audioFormat || 'mp3';
-            const downloadUrl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${qn}&type=audio&format=${audioFormat}`;
+            const downloadUrl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${qn}&type=audio`;
             downloadFile(downloadUrl, `${safeTitle}.${audioFormat}`);
         } else if (selectedFormat === 'video-only') {
             // 下载视频（无音频）- 使用选择的视频格式
@@ -3014,7 +2697,7 @@ function updateDownloadHint() {
 async function executeDownload() {
     const data = currentData || currentVideoData;
     if(!data) {
-        alert('请先解析视频');
+        alert('请先处理视频');
         return;
     }
     
@@ -3343,7 +3026,7 @@ handleSmartParse = async function() {
         console.log('提取到的视频链接:', urls); // 调试日志
         
         if (urls.length > 1) {
-            // 批量解析
+            // 批量处理
             await handleBatchParseNew(urls);
         } else if (urls.length === 1) {
             // 单链接解析
@@ -3391,7 +3074,7 @@ async function handleBatchParseNew(urls) {
             item.innerHTML = `
                 <div class="batch-thumb"></div>
                 <div class="batch-info">
-                    <div class="batch-title">正在解析... ${escapeHtml(urls[i])}</div>
+                    <div class="batch-title">正在处理... ${escapeHtml(urls[i])}</div>
                 </div>
             `;
             batchListEl.appendChild(item);
@@ -3427,7 +3110,7 @@ async function handleBatchParseNew(urls) {
                         <img class="batch-thumb" src="${thumbnailUrl || 'data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 16 9\"><rect fill=\"%23334155\" width=\"16\" height=\"9\"/></svg>'}">
                         <div class="batch-info">
                             <div class="batch-title">${escapeHtml(resultData.title || '未知标题')}</div>
-                            <div class="batch-status success"><i class="fas fa-check"></i> 解析成功</div>
+                            <div class="batch-status success"><i class="fas fa-check"></i> 处理成功</div>
                         </div>
                         <button onclick="downloadBatchItem(${i})" style="background:var(--primary); color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">
                             <i class="fas fa-download"></i>
@@ -3438,7 +3121,7 @@ async function handleBatchParseNew(urls) {
                 batchResults.push({
                     success: false,
                     url: urls[i],
-                    error: data.error || '解析失败'
+                    error: data.error || '处理失败'
                 });
                 failedCount++;
                 
@@ -3447,7 +3130,7 @@ async function handleBatchParseNew(urls) {
                     batchListEl.children[i].innerHTML = `
                         <div class="batch-info">
                             <div class="batch-title">${escapeHtml(urls[i])}</div>
-                            <div class="batch-status error"><i class="fas fa-times"></i> ${escapeHtml(data.error || '解析失败')}</div>
+                            <div class="batch-status error"><i class="fas fa-times"></i> ${escapeHtml(data.error || '处理失败')}</div>
                         </div>
                         <button onclick="retryBatchItem(${i})" style="background:var(--blue); color:white; border:none; padding:6px 12px; border-radius:4px; cursor:pointer;">
                             <i class="fas fa-redo"></i>
@@ -3520,12 +3203,11 @@ downloadAllBatch = function() {
                     const downloadUrl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${qn}&type=video`;
                     triggerBrowserDownload(downloadUrl, `${safeTitle}_video.m4s`);
                 } else if (appState.format === 'video+audio-separate') {
-                    const audioFormat = appState.audioFormat || 'mp3';
                     const videoUrl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${qn}&type=video`;
                     triggerBrowserDownload(videoUrl, `${safeTitle}_video.m4s`);
                     setTimeout(() => {
-                        const audioUrl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${qn}&type=audio&format=${audioFormat}`;
-                        triggerBrowserDownload(audioUrl, `${safeTitle}_audio.${audioFormat}`);
+                        const audioUrl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${qn}&type=audio`;
+                        triggerBrowserDownload(audioUrl, `${safeTitle}_audio.m4a`);
                     }, 800);
                 } else {
                     const downloadUrl = `${API_BASE_URL}/api/bilibili/download?url=${encodedUrl}&qn=${qn}`;
@@ -3556,11 +3238,8 @@ downloadAllBatch = function() {
 function clearBatch() {
     if (batchSection) batchSection.classList.add('hidden');
     batchResults = [];
-    selectedBatchItems.clear(); // 清空选中状态
     if (batchList) batchList.innerHTML = '';
     if (batchCount) batchCount.textContent = '0';
-    updateBatchSelectionCount();
-    showToast('已清空批量列表', 'success');
 }
 
 // ==================== 背景图系统 (二次元美少女) ====================
@@ -3757,7 +3436,7 @@ handleSingleParse = async function(url) {
             // 显示结果
             showSingleResult(data.data);
         } else {
-            throw new Error(data.error || '解析失败');
+            throw new Error(data.error || '处理失败');
         }
     } catch (error) {
         if (errorSection) {
@@ -3796,12 +3475,6 @@ window.downloadBatchItem = downloadBatchItem;
 window.retryBatchItem = retryBatchItem;
 window.downloadAllBatch = downloadAllBatch;
 window.clearBatchResults = clearBatchResults;
-// 批量选择功能
-window.toggleBatchSelection = toggleBatchSelection;
-window.selectAllBatch = selectAllBatch;
-window.invertBatchSelection = invertBatchSelection;
-window.clearBatchSelection = clearBatchSelection;
-window.updateBatchSelectionCount = updateBatchSelectionCount;
 // Gist 公告
 window.showGistAnnouncement = showGistAnnouncement;
 window.closeGistAnnouncement = closeGistAnnouncement;

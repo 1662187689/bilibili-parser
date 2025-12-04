@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>b站解析助手@2025</title>
+    <title>视频去水印助手@2025</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         /* ==================== 核心变量 (蜜桃奶茶 + 暗樱粉主题) ==================== */
@@ -57,46 +57,6 @@
             transition: background 0.3s;
             position: relative;
             overflow-x: hidden;
-        }
-
-        /* ==================== 自定义滚动条样式 ==================== */
-        /* Webkit浏览器（Chrome、Safari、Edge） */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        
-        ::-webkit-scrollbar-thumb {
-            background: rgba(var(--text-gray), 0.2);
-            border-radius: 3px;
-            transition: background 0.2s;
-        }
-        
-        ::-webkit-scrollbar-thumb:hover {
-            background: rgba(var(--text-gray), 0.4);
-        }
-        
-        /* Firefox */
-        * {
-            scrollbar-width: thin;
-            scrollbar-color: rgba(139, 125, 120, 0.2) transparent;
-        }
-        
-        /* 暗色主题滚动条 */
-        body.dark-theme ::-webkit-scrollbar-thumb {
-            background: rgba(212, 184, 200, 0.2);
-        }
-        
-        body.dark-theme ::-webkit-scrollbar-thumb:hover {
-            background: rgba(212, 184, 200, 0.4);
-        }
-        
-        body.dark-theme * {
-            scrollbar-color: rgba(212, 184, 200, 0.2) transparent;
         }
 
         /* 1. 背景图容器 - 二次元美少女背景 */
@@ -202,13 +162,25 @@
             background: rgba(40, 20, 35, 0.45); /* 暗樱粉，更透明 */
         }
 
-        /* 登录弹窗按钮悬停效果 */
-        #loginModal button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        /* 登录弹窗暗色模式 */
+        body.dark-theme #loginModal > div {
+            background: rgba(35, 25, 32, 0.98) !important;
+            border: 1px solid rgba(255, 155, 184, 0.2);
         }
-        #loginModal button:active {
-            transform: translateY(0);
+        body.dark-theme #loginModal > div h3 {
+            color: var(--primary) !important;
+        }
+        body.dark-theme #loginModal > div > div:first-of-type {
+            background: rgba(255, 255, 255, 0.95) !important; /* 二维码区保持白色 */
+            border-color: rgba(255, 155, 184, 0.3) !important;
+        }
+        body.dark-theme #loginModal > div p {
+            color: var(--text-gray) !important;
+        }
+        body.dark-theme #loginModal > div button:last-child {
+            background: rgba(50, 35, 45, 0.8) !important;
+            border-color: rgba(255, 155, 184, 0.3) !important;
+            color: var(--text-main) !important;
         }
         
         .header-inner {
@@ -698,58 +670,8 @@
             gap: 15px;
             border: 1px solid var(--border);
             align-items: center;
-            transition: all 0.3s var(--ease);
-        }
-        .batch-item:hover {
-            background: var(--bg-input);
-            transform: translateX(3px);
         }
         .batch-thumb { width: 100px; height: 56px; border-radius: 4px; object-fit: cover; background: #eee; }
-        
-        /* 批量复选框 */
-        .batch-checkbox-container {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-right: 5px;
-        }
-        .batch-checkbox {
-            width: 20px;
-            height: 20px;
-            cursor: pointer;
-            accent-color: var(--primary);
-            border-radius: 4px;
-            transition: all 0.2s;
-        }
-        .batch-checkbox:hover {
-            transform: scale(1.1);
-        }
-        
-        /* 批量操作按钮 */
-        .batch-action-btn {
-            background: transparent;
-            border: 1px solid var(--border);
-            padding: 8px 15px;
-            border-radius: 6px;
-            cursor: pointer;
-            color: var(--text-main);
-            height: 36px;
-            font-size: 0.9rem;
-            transition: all 0.2s var(--ease);
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .batch-action-btn:hover {
-            background: var(--primary);
-            color: white;
-            border-color: var(--primary);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(var(--primary), 0.3);
-        }
-        .batch-action-btn i {
-            font-size: 0.85rem;
-        }
         .batch-info { flex: 1; min-width: 0; }
         .batch-title { font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
         .batch-status { font-size: 0.8rem; color: var(--text-gray); display: flex; align-items: center; gap: 5px; }
@@ -846,153 +768,11 @@
         .loading-spinner { border: 3px solid var(--bg-bar); border-top: 3px solid var(--primary); border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; display: inline-block; vertical-align: middle; margin-right: 8px;}
         @keyframes spin { 100% { transform: rotate(360deg); } }
 
-        /* ==================== 移动端适配（全面优化） ==================== */
         @media (max-width: 768px) {
-            body {
-                padding: 0;
-            }
-            
-            .header-inner {
-                padding: 12px 15px;
-            }
-            
-            .logo {
-                font-size: 1rem;
-            }
-            
-            .logo span {
-                display: none; /* 移动端隐藏文字，只保留图标 */
-            }
-            
-            .main-card {
-                border-radius: 0;
-                box-shadow: none;
-                border-left: none;
-                border-right: none;
-            }
-            
-            .url-input {
-                min-height: 80px;
-                font-size: 0.9rem;
-                padding: 12px;
-            }
-            
-            .result-card { 
-                grid-template-columns: 1fr; 
-                gap: 15px;
-            }
-            
-            .control-panel { 
-                flex-direction: column; 
-                align-items: stretch; 
-            }
-            
-            .parse-btn { 
-                height: 44px;
-                justify-content: center; 
-                font-size: 1rem;
-            }
-            
-            /* 批量操作按钮移动端优化 */
-            .batch-action-btn {
-                padding: 8px 12px;
-                font-size: 0.8rem;
-                flex: 1;
-                justify-content: center;
-            }
-            
-            .batch-item {
-                padding: 10px;
-                gap: 8px;
-            }
-            
-            .batch-thumb {
-                width: 70px;
-                height: 40px;
-            }
-            
-            .batch-title {
-                font-size: 0.85rem;
-            }
-            
-            .batch-checkbox {
-                width: 18px;
-                height: 18px;
-            }
-            
-            /* 设置侧边栏移动端全屏 */
-            .settings-sidebar {
-                width: 100%;
-                max-width: 100%;
-                border-radius: 0;
-            }
-            
-            /* 弹窗移动端优化 */
-            .modal-content {
-                width: 95%;
-                max-width: 95%;
-                margin: 10px;
-            }
-            
-            #loginModal > div {
-                width: 90%;
-                max-width: 340px;
-                padding: 25px;
-            }
-            
-            /* 历史记录移动端优化 */
-            .history-dropdown { 
-                width: calc(100vw - 30px);
-                left: 15px;
-                right: 15px;
-                top: 90px; 
-            }
-            
-            .history-trigger {
-                padding: 8px 12px;
-                font-size: 0.9rem;
-            }
-            
-            /* 下载进度框移动端 */
-            #downloadProgressBox {
-                bottom: 10px;
-                right: 10px;
-                left: 10px;
-                width: auto;
-            }
-            
-            /* Footer移动端 */
-            .footer {
-                padding: 15px;
-                font-size: 0.85rem;
-            }
-        }
-        
-        /* 小屏幕优化 */
-        @media (max-width: 480px) {
-            .mini-segment {
-                font-size: 0.7rem;
-                gap: 3px;
-            }
-            
-            .segment-btn {
-                padding: 6px 8px;
-            }
-            
-            .quality-btn {
-                min-width: 50px;
-                font-size: 0.75rem;
-                padding: 5px;
-            }
-            
-            .batch-action-btn i {
-                margin: 0;
-            }
-            
-            .batch-action-btn {
-                min-width: 36px;
-                padding: 8px;
-            }
+            .result-card { grid-template-columns: 1fr; }
+            .control-panel { flex-direction: column; align-items: stretch; }
+            .parse-btn { height: 40px; justify-content: center; }
+            .history-dropdown { width: auto; left: 20px; top: 90px; }
         }
 
         /* ==================== 音乐播放器（精灵球效果） ==================== */
@@ -1513,117 +1293,6 @@
                 width: calc(100vw - 20px);
             }
         }
-
-        /* ==================== 下载进度条样式 ==================== */
-        #downloadProgressBox {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            width: 400px;
-            max-width: calc(100vw - 40px);
-            background: var(--bg-card);
-            backdrop-filter: var(--backdrop-blur);
-            border-radius: var(--radius);
-            box-shadow: var(--shadow-float);
-            border: 1px solid var(--border);
-            padding: 20px;
-            z-index: 10000;
-            display: none;
-            opacity: 0;
-            transform: translateY(20px);
-            transition: all 0.3s var(--ease);
-        }
-
-        #downloadProgressBox.show {
-            opacity: 1;
-            transform: translateY(0);
-        }
-
-        .download-progress-content {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .progress-header {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            color: var(--text-main);
-            font-weight: 500;
-        }
-
-        .progress-header i {
-            color: var(--primary);
-            font-size: 1.2rem;
-        }
-
-        .progress-filename {
-            flex: 1;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            font-size: 0.9rem;
-        }
-
-        .progress-close {
-            background: none;
-            border: none;
-            color: var(--text-gray);
-            cursor: pointer;
-            padding: 5px;
-            border-radius: 4px;
-            transition: all 0.2s;
-        }
-
-        .progress-close:hover {
-            background: var(--bg-input);
-            color: var(--primary);
-        }
-
-        .progress-bar-container {
-            width: 100%;
-            height: 8px;
-            background: var(--bg-input);
-            border-radius: 10px;
-            overflow: hidden;
-        }
-
-        .progress-bar {
-            height: 100%;
-            background: linear-gradient(90deg, var(--primary), var(--blue));
-            border-radius: 10px;
-            transition: width 0.3s ease;
-            box-shadow: 0 0 10px rgba(var(--primary), 0.5);
-        }
-
-        .progress-info {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 0.85rem;
-            color: var(--text-gray);
-        }
-
-        .progress-percent {
-            font-weight: 600;
-            color: var(--primary);
-        }
-
-        .progress-speed {
-            color: var(--blue);
-        }
-
-        .progress-remaining {
-            font-style: italic;
-        }
-
-        @media (max-width: 768px) {
-            #downloadProgressBox {
-                width: calc(100vw - 40px);
-                right: 20px;
-            }
-        }
     </style>
 </head>
 <body class="light-theme">
@@ -1632,10 +1301,10 @@
 
     <header class="header">
         <div class="header-inner">
-            <a href="#" class="logo"><i class="fab fa-bilibili"></i> <span>b站解析助手@2025</span></a>
+            <a href="#" class="logo"><i class="fas fa-video"></i> <span>视频去水印助手@2025</span></a>
             <div class="user-area">
                 <div id="loginBtnArea">
-                    <button onclick="showLoginModal()">登录 Bilibili</button>
+                    <button onclick="showLoginModal()">登录网站</button>
                 </div>
                 <div id="userInfoArea" class="user-info-display hidden">
                     <img id="headerAvatar" class="user-avatar" src="" alt="User">
@@ -1745,7 +1414,7 @@
             <div class="super-search-box">
                 <!-- 上半部分：输入 -->
                 <div class="input-area">
-                    <textarea id="videoUrl" class="url-input" placeholder="粘贴视频链接、BV号或收藏夹ID (支持批量/换行分隔)"></textarea>
+                    <textarea id="videoUrl" class="url-input" placeholder="粘贴视频链接 (支持批量/换行分隔)"></textarea>
                 </div>
 
                 <!-- 历史记录触发器 + 清空按钮 -->
@@ -1753,15 +1422,15 @@
                     <button class="clear-all-btn" onclick="clearAll()" title="清空输入和结果">
                         <i class="fas fa-trash-alt"></i>
                     </button>
-                    <button class="history-trigger" onclick="toggleHistory(event)" title="历史记录">
-                        <i class="fas fa-history"></i>
+                    <button class="history-trigger" onclick="toggleHistory(event)">
+                        <i class="fas fa-history"></i> 历史记录
                     </button>
                 </div>
 
                 <!-- 历史记录下拉菜单 -->
                 <div class="history-dropdown" id="historyDropdown">
                     <div class="history-header">
-                        <span><i class="far fa-clock"></i> 最近解析记录</span>
+                        <span><i class="far fa-clock"></i> 最近记录</span>
                         <span onclick="clearHistory()" style="cursor:pointer; color:#FF6699;">清空</span>
                     </div>
                     <div class="history-items" id="historyDropdownList">
@@ -1807,9 +1476,9 @@
                         </div>
                     </div>
 
-                    <!-- 统一解析按钮 -->
+                    <!-- 统一去水印按钮 -->
                     <button id="parseBtn" class="parse-btn">
-                        <i class="fas fa-search"></i> 解析下载
+                        <i class="fas fa-search"></i> 去水印下载
                     </button>
                 </div>
             </div>
@@ -1817,7 +1486,7 @@
 
         <div id="loadingSection" class="hidden" style="text-align: center; margin-top: 30px;">
             <div class="loading-spinner"></div>
-            <span style="color: var(--text-gray);">正在智能解析...</span>
+            <span style="color: var(--text-gray);">正在处理...</span>
         </div>
 
         <!-- 单视频结果 -->
@@ -1847,29 +1516,12 @@
 
         <!-- 批量结果与进度条 -->
         <div id="batchSection" class="hidden">
-            <div style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+            <div style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                 <h3 style="font-size: 1.1rem;">批量结果 (<span id="batchCount">0</span>)</h3>
-                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                    <button onclick="selectAllBatch()" class="batch-action-btn">
-                        <i class="fas fa-check-double"></i> 全选
-                    </button>
-                    <button onclick="invertBatchSelection()" class="batch-action-btn">
-                        <i class="fas fa-exchange-alt"></i> 反选
-                    </button>
-                    <button onclick="clearBatchSelection()" class="batch-action-btn">
-                        <i class="fas fa-times"></i> 清空选择
-                    </button>
-                    <button onclick="clearBatch()" class="batch-action-btn" style="border-color: var(--error-color); color: var(--error-color);">
-                        <i class="fas fa-trash"></i> 清空列表
-                    </button>
-                    <button id="downloadAllBtn" onclick="downloadAllBatch()" class="parse-btn" style="height:36px; font-size:0.9rem;" disabled>
-                        <i class="fas fa-download"></i> 下载选中
-                    </button>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <button onclick="clearBatch()" style="background:transparent; border:1px solid var(--border); padding:8px 15px; border-radius:6px; cursor:pointer; color:var(--text-gray); height:36px; font-size:0.9rem;">清空</button>
+                    <button id="downloadAllBtn" onclick="downloadAllBatch()" class="parse-btn" style="height:36px; font-size:0.9rem;"><i class="fas fa-download"></i> 全部下载</button>
                 </div>
-            </div>
-            <div style="margin-bottom: 12px; padding: 8px 12px; background: var(--bg-input); border-radius: 8px; font-size: 0.85rem; color: var(--text-gray); display: flex; align-items: center; gap: 8px;">
-                <i class="fas fa-info-circle" style="color: var(--blue);"></i>
-                <span>为了防止服务器超负荷，每次最多选择5个视频同时下载</span>
             </div>
 
             <!-- 下载进度条 -->
@@ -1898,7 +1550,7 @@
             <a href="javascript:void(0)" onclick="showFeedbackModal()" class="footer-link">建议反馈</a>
         </div>
         <div style="color: var(--text-gray); font-size: 0.85rem;">
-            b站解析助手@2025 &copy; 2025
+            视频去水印助手@2025 &copy; 2025
         </div>
     </footer>
 
@@ -1932,26 +1584,17 @@
     </div>
 
     <!-- Login Modal -->
-    <div id="loginModal" class="hidden" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:200; display:flex; justify-content:center; align-items:center; backdrop-filter:blur(8px);">
-        <div style="background:var(--bg-card); padding:35px; border-radius:var(--radius); width:360px; text-align:center; box-shadow:var(--shadow-float); backdrop-filter:var(--backdrop-blur); border:1px solid var(--border);">
-            <h3 style="margin-bottom:25px; color:var(--primary); font-size:1.4rem; display:flex; align-items:center; justify-content:center; gap:10px;">
-                <i class="fab fa-bilibili"></i> 扫码登录
-            </h3>
-            <div style="width:210px; height:210px; background:rgba(255,255,255,0.98); margin:0 auto; display:flex; align-items:center; justify-content:center; border-radius:12px; border:2px solid var(--border); box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+    <div id="loginModal" class="hidden" style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:200; display:flex; justify-content:center; align-items:center;">
+        <div style="background:rgba(255,255,255,0.95); padding:30px; border-radius:16px; width:350px; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,0.3); backdrop-filter:blur(20px);">
+            <h3 style="margin-bottom:20px; color:var(--primary); font-size:1.3rem;">扫码登录</h3>
+            <div style="width:200px; height:200px; background:#fff; margin:0 auto; display:flex; align-items:center; justify-content:center; border-radius:12px; border:2px solid #eee;">
                 <img id="qrImg" src="" style="width:100%; height:100%; display:none; border-radius:10px;">
-                <span id="qrText" style="color:var(--text-gray); font-size:0.9rem;">二维码加载中...</span>
+                <span id="qrText" style="color:#666;">二维码加载中...</span>
             </div>
-            <p style="margin-top:20px; font-size:0.9rem; color:var(--text-gray); display:flex; align-items:center; justify-content:center; gap:6px;">
-                <i class="fas fa-mobile-alt" style="color:var(--primary);"></i>
-                请使用 Bilibili 客户端扫码
-            </p>
-            <div style="margin-top:20px; display:flex; gap:12px; justify-content:center;">
-                <button onclick="refreshQRCode()" style="padding:10px 24px; border:none; background:var(--primary); color:white; border-radius:8px; cursor:pointer; font-size:0.9rem; transition:all 0.2s; display:flex; align-items:center; gap:6px;">
-                    <i class="fas fa-sync-alt"></i> 刷新
-                </button>
-                <button onclick="closeLoginModal()" style="padding:10px 24px; border:1px solid var(--border); background:transparent; color:var(--text-main); border-radius:8px; cursor:pointer; font-size:0.9rem; transition:all 0.2s;">
-                    关闭
-                </button>
+            <p style="margin-top:15px; font-size:0.9rem; color:#666;">请使用 Bilibili 客户端扫码</p>
+            <div style="margin-top:15px; display:flex; gap:10px; justify-content:center;">
+                <button onclick="refreshQRCode()" style="padding:10px 20px; border:none; background:var(--primary); color:white; border-radius:8px; cursor:pointer; font-size:0.9rem;">刷新二维码</button>
+                <button onclick="closeLoginModal()" style="padding:10px 20px; border:1px solid #ddd; background:#f5f5f5; border-radius:8px; cursor:pointer; color:#666; font-size:0.9rem;">关闭</button>
             </div>
         </div>
     </div>
@@ -1986,16 +1629,16 @@
                 <button onclick="closeAboutModal()" style="border:none; background:transparent; color:white; cursor:pointer;"><i class="fas fa-times"></i></button>
             </div>
             <div class="modal-body">
-                <h4 style="color:var(--primary); margin-bottom:15px;">B站视频解析助手</h4>
+                <h4 style="color:var(--primary); margin-bottom:15px;">视频去水印助手</h4>
                 <p style="line-height:1.8; color:var(--text-main); margin-bottom:15px;">
-                    一个功能完整的全栈视频解析下载工具，支持 B站、收藏夹、批量解析等功能。
+                    一个功能完整的全栈视频去水印下载工具，支持批量处理、收藏夹等功能。
                 </p>
                 <p style="line-height:1.8; color:var(--text-main); margin-bottom:15px;">
                     <strong>主要功能：</strong><br>
                     • 多链接解析（单个、批量、收藏夹、UP主投稿）<br>
                     • 多格式下载（视音完整、分离、仅音频、纯画面、封面）<br>
                     • 多画质支持（4K、1080P60、1080P+、1080P、720P 等）<br>
-                    • B站扫码登录、VIP 权限检测<br>
+                    • 网站登录、VIP 权限检测<br>
                     • 现代化 UI（毛玻璃效果、主题切换、二次元背景）
                 </p>
                 <p style="line-height:1.8; color:var(--text-gray); font-size:0.9rem; margin-top:20px;">
@@ -2018,42 +1661,42 @@
                 <button onclick="closeUsageModal()" style="border:none; background:transparent; color:white; cursor:pointer;"><i class="fas fa-times"></i></button>
             </div>
             <div class="modal-body" style="max-height:60vh; overflow-y:auto;">
-                <h4 style="color:var(--primary); margin-bottom:15px;">单链接解析</h4>
+                <h4 style="color:var(--primary); margin-bottom:15px;">单链接去水印</h4>
                 <p style="line-height:1.8; color:var(--text-main); margin-bottom:20px;">
-                    1. 在搜索框输入 B站视频链接或 BV 号<br>
+                    1. 在搜索框输入视频链接<br>
                     2. 选择下载类型：视音完整、视音分离、仅音频、纯画面、封面<br>
                     3. 选择视频格式（MP4/FLV/MKV/WebM）和音频格式（MP3/FLAC/AAC/M4A）<br>
                     4. 选择画质（4K/1080P60/1080P+/1080P/720P 等）<br>
-                    5. 点击"解析下载"
+                    5. 点击"去水印下载"
                 </p>
                 
-                <h4 style="color:var(--primary); margin-bottom:15px;">批量解析</h4>
+                <h4 style="color:var(--primary); margin-bottom:15px;">批量处理</h4>
                 <p style="line-height:1.8; color:var(--text-main); margin-bottom:20px;">
                     1. 在搜索框输入多个链接（换行分隔）<br>
-                    2. 系统自动识别并批量解析<br>
+                    2. 系统自动识别并批量处理<br>
                     3. 点击"全部下载"或单独下载
                 </p>
                 
-                <h4 style="color:var(--primary); margin-bottom:15px;">收藏夹解析</h4>
+                <h4 style="color:var(--primary); margin-bottom:15px;">收藏夹处理</h4>
                 <p style="line-height:1.8; color:var(--text-main); margin-bottom:20px;">
                     1. 输入收藏夹链接或 ID<br>
                     &nbsp;&nbsp;&nbsp;链接格式：https://space.bilibili.com/xxx/favlist?fid=xxx<br>
                     &nbsp;&nbsp;&nbsp;或直接输入收藏夹 ID：1765119834<br>
-                    2. 系统自动解析收藏夹内所有视频<br>
+                    2. 系统自动处理收藏夹内所有视频<br>
                     3. 批量下载
                 </p>
                 
-                <h4 style="color:var(--primary); margin-bottom:15px;">UP主投稿解析</h4>
+                <h4 style="color:var(--primary); margin-bottom:15px;">用户投稿处理</h4>
                 <p style="line-height:1.8; color:var(--text-main); margin-bottom:20px;">
-                    1. 输入 UP主主页链接<br>
+                    1. 输入用户主页链接<br>
                     &nbsp;&nbsp;&nbsp;格式：https://space.bilibili.com/522224434<br>
-                    2. 系统自动解析所有投稿视频<br>
+                    2. 系统自动处理所有投稿视频<br>
                     3. 批量下载
                 </p>
                 
                 <h4 style="color:var(--primary); margin-bottom:15px;">VIP 权限</h4>
                 <p style="line-height:1.8; color:var(--text-main); margin-bottom:20px;">
-                    部分画质需要大会员，请先登录 B站账号。登录后系统会自动检测 VIP 状态。
+                    部分画质需要会员权限，请先登录网站账号。登录后系统会自动检测 VIP 状态。
                 </p>
             </div>
             <div class="modal-footer">
