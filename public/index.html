@@ -386,8 +386,23 @@
             /* 支持横向滚动 */
             overflow-x: auto;
             scrollbar-width: none; /* Firefox */
+            /* 添加淡入淡出动画 */
+            transition: opacity 0.3s ease, 
+                        max-height 0.3s ease,
+                        margin 0.3s ease,
+                        padding 0.3s ease;
+            overflow: hidden;
         }
         .mini-segment::-webkit-scrollbar { display: none; /* Chrome/Safari */ }
+        
+        /* 隐藏状态 */
+        .mini-segment.hidden {
+            opacity: 0;
+            max-height: 0;
+            margin: 0;
+            padding: 0;
+            pointer-events: none;
+        }
 
         .glider {
             position: absolute;
@@ -396,10 +411,13 @@
             bottom: 3px;
             background: var(--blue); /* 选中色 */
             border-radius: 4px;
-            transition: all 0.3s var(--ease);
+            transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), 
+                        width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                        opacity 0.2s ease;
             z-index: 1;
             width: 0;
             opacity: 0.15; /* 提高可见度 */
+            will-change: transform, width;
         }
         /* 选中状态的高亮逻辑 */
         .mini-segment.quality-mode .glider { 
@@ -416,7 +434,9 @@
             font-size: 0.85rem;
             color: var(--text-gray);
             cursor: pointer;
-            transition: color 0.3s;
+            transition: color 0.25s ease, 
+                        font-weight 0.2s ease,
+                        transform 0.15s ease;
             white-space: nowrap;
             display: flex;
             align-items: center;
@@ -425,11 +445,15 @@
             min-width: 60px; /* 防止挤压 */
         }
 
-        .segment-opt:hover { color: var(--text-main); }
+        .segment-opt:hover { 
+            color: var(--text-main);
+            transform: translateY(-1px);
+        }
         
         .segment-opt.active { 
             color: var(--blue) !important; 
-            font-weight: 600; 
+            font-weight: 600;
+            transform: translateY(0);
         }
         
         /* 针对画质行的选中色 */
@@ -785,7 +809,7 @@
                         </div>
 
                         <!-- 视频格式行（仅在需要视频时显示） -->
-                        <div class="mini-segment" id="videoFormatSegment" style="display: none;">
+                        <div class="mini-segment hidden" id="videoFormatSegment">
                             <div class="glider"></div>
                             <div class="segment-opt active" data-val="mp4" onclick="setPreset('videoFormat', 'mp4', this)">
                                 MP4
@@ -802,7 +826,7 @@
                         </div>
 
                         <!-- 音频格式行（仅在需要音频时显示） -->
-                        <div class="mini-segment" id="audioFormatSegment" style="display: none;">
+                        <div class="mini-segment hidden" id="audioFormatSegment">
                             <div class="glider"></div>
                             <div class="segment-opt active" data-val="mp3" onclick="setPreset('audioFormat', 'mp3', this)">
                                 MP3

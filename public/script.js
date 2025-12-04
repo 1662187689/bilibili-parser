@@ -1,4 +1,4 @@
-﻿// API 配置
+// API 配置
 const API_BASE_URL = window.location.origin;
 
 // GitHub Gist 公告配置
@@ -9,7 +9,8 @@ const GIST_CONFIG = {
     enabled: true
 };
 
-// 全局状态（适配�?HTML�?let appState = {
+// 全局状态（适配新 HTML）
+let appState = {
     format: localStorage.getItem('preset_format') || 'video+audio',
     quality: parseInt(localStorage.getItem('preset_quality') || '80'),
     videoFormat: localStorage.getItem('preset_videoFormat') || 'mp4',
@@ -20,7 +21,7 @@ const GIST_CONFIG = {
 
 // 兼容旧代码的全局变量
 let currentVideoData = null;
-let currentData = null; // �?HTML 使用这个
+let currentData = null; // 新 HTML 使用这个
 let selectedQuality = null;
 let selectedFormat = 'video+audio';
 let isLoggedIn = false;
@@ -53,13 +54,14 @@ const errorSection = document.getElementById('errorSection');
 const toast = document.getElementById('toast');
 const toastMessage = document.getElementById('toastMessage');
 
-// �?HTML 使用�?DOM 元素（可能不存在，需要检查）
+// 新 HTML 使用的 DOM 元素（可能不存在，需要检查）
 let batchSection = null;
 let batchList = null;
 let batchCount = null;
 
-// 初始�?document.addEventListener('DOMContentLoaded', () => {
-    // 初始化新 HTML �?DOM 元素
+// 初始化
+document.addEventListener('DOMContentLoaded', () => {
+    // 初始化新 HTML 的 DOM 元素
     batchSection = document.getElementById('batchSection');
     batchList = document.getElementById('batchList');
     batchCount = document.getElementById('batchCount');
@@ -70,7 +72,7 @@ let batchCount = null;
     // 应用主题
     applyTheme();
     
-    // 初始化新 HTML �?UI
+    // 初始化新 HTML 的 UI
     initUI();
     
     // 初始化背景图
@@ -88,7 +90,8 @@ let batchCount = null;
         });
     }
     
-    // 输入内容变化时更新提�?    if (videoUrlInput) {
+    // 输入内容变化时更新提示
+    if (videoUrlInput) {
         videoUrlInput.addEventListener('input', updateInputHint);
         videoUrlInput.addEventListener('paste', () => {
             setTimeout(updateInputHint, 100);
@@ -104,15 +107,17 @@ let batchCount = null;
     }
 
     // 加载 Gist 公告
-    checkAnnouncement(); // �?HTML 使用这个函数
+    checkAnnouncement(); // 新 HTML 使用这个函数
     
-    // 检查登录状�?    checkLoginStatus();
-    checkLogin(); // �?HTML 使用这个函数
+    // 检查登录状态
+    checkLoginStatus();
+    checkLogin(); // 新 HTML 使用这个函数
     
     // 恢复上次的解析搜索结果（保持登录/退出后的状态）
     restoreLastParseResult();
     
-    // 加载历史记录到下拉菜�?    loadHistoryToDropdown();
+    // 加载历史记录到下拉菜单
+    loadHistoryToDropdown();
     
     // 初始化预设选项
     initPresetOptions();
@@ -148,7 +153,8 @@ let batchCount = null;
 // ==================== 预设选项功能 ====================
 
 function initPresetOptions() {
-    // 恢复保存的预�?    const savedFormat = localStorage.getItem('presetFormat');
+    // 恢复保存的预设
+    const savedFormat = localStorage.getItem('presetFormat');
     const savedQuality = localStorage.getItem('presetQuality');
     
     if (savedFormat) {
@@ -181,7 +187,8 @@ function selectPresetFormat(format, element) {
     presetFormat = format;
     localStorage.setItem('presetFormat', format);
     
-    // 更新按钮状�?    document.querySelectorAll('#formatGroup .preset-item').forEach(btn => {
+    // 更新按钮状态
+    document.querySelectorAll('#formatGroup .preset-item').forEach(btn => {
         btn.classList.remove('active');
     });
     element.classList.add('active');
@@ -191,9 +198,10 @@ function selectPresetFormat(format, element) {
 }
 
 function selectPresetQuality(qn, element) {
-    // 检查是否需要登�?    const needVip = qn > 80;
+    // 检查是否需要登录
+    const needVip = qn > 80;
     if (needVip && !isLoggedIn) {
-        showToast('请先登录B站账�?, 'error');
+        showToast('请先登录B站账号', 'error');
         showLoginModal();
         return;
     }
@@ -205,18 +213,21 @@ function selectPresetQuality(qn, element) {
     presetQuality = qn;
     localStorage.setItem('presetQuality', qn);
     
-    // 更新按钮状�?    document.querySelectorAll('#qualityGroup .preset-item').forEach(btn => {
+    // 更新按钮状态
+    document.querySelectorAll('#qualityGroup .preset-item').forEach(btn => {
         btn.classList.remove('active');
     });
     element.classList.add('active');
     updatePresetInfoDisplay();
 }
 
-// 选择预设输出格式（mp4, mp3, flac�?function selectPresetOutput(output, element) {
+// 选择预设输出格式（mp4, mp3, flac）
+function selectPresetOutput(output, element) {
     presetOutput = output;
     localStorage.setItem('presetOutput', output);
     
-    // 更新按钮状�?    const outputGroup = document.getElementById('outputGroup');
+    // 更新按钮状态
+    const outputGroup = document.getElementById('outputGroup');
     if (outputGroup) {
         outputGroup.querySelectorAll('.preset-item').forEach(btn => {
             btn.classList.remove('active');
@@ -259,8 +270,8 @@ function updatePresetInfoDisplay() {
     const formatNames = {
         'video+audio': '完整视频',
         'video+audio-separate': '视频+音频分离',
-        'audio': '仅音�?,
-        'video-only': '仅视�?,
+        'audio': '仅音频',
+        'video-only': '仅视频',
         'cover': '封面'
     };
     
@@ -283,7 +294,8 @@ function updatePresetInfoDisplay() {
     }
 }
 
-// 使用预设下载（单视频�?async function downloadWithPreset() {
+// 使用预设下载（单视频）
+async function downloadWithPreset() {
     if (!currentVideoData) {
         showToast('请先解析视频', 'error');
         return;
@@ -303,7 +315,7 @@ function updatePresetInfoDisplay() {
         // 根据预设格式执行下载
         if (presetFormat === 'cover') {
             if (!currentVideoData.thumbnail) {
-                showToast('该视频没有封�?, 'error');
+                showToast('该视频没有封面', 'error');
                 downloadBtn.disabled = false;
                 downloadBtn.innerHTML = originalText;
                 return;
@@ -327,11 +339,12 @@ function updatePresetInfoDisplay() {
             const downloadUrl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${qn}&type=video`;
             triggerBrowserDownload(downloadUrl, `${safeTitle}_video.m4s`);
         } else {
-            // 完整视频（需要服务器合并�?            const downloadUrl = `${API_BASE_URL}/api/bilibili/download?url=${encodedUrl}&qn=${qn}`;
+            // 完整视频（需要服务器合并）
+            const downloadUrl = `${API_BASE_URL}/api/bilibili/download?url=${encodedUrl}&qn=${qn}`;
             triggerBrowserDownload(downloadUrl, `${safeTitle}.mp4`);
         }
         
-        showToast('下载已开�?..', 'success');
+        showToast('下载已开始...', 'success');
         
     } catch (error) {
         showToast('下载失败: ' + error.message, 'error');
@@ -343,46 +356,17 @@ function updatePresetInfoDisplay() {
     }
 }
 
-// 触发浏览器下�?function triggerBrowserDownload(url, filename) {
-    try {
-        console.log('开始下�?', url, filename);
-        
-        // 检�?URL 是否有效
-        if (!url || url === 'undefined' || url === 'null') {
-            console.error('无效的下�?URL:', url);
-            showToast('下载失败：无效的链接', 'error');
-            return;
-        }
-        
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        link.style.display = 'none';
-        // 注意：不要设置 target="_blank"，因为会与 download 属性冲突
-        // download 属性已经足够让浏览器下载文件
-        
-        // 添加错误处理
-        link.onerror = () => {
-            console.error('下载链接错误:', url);
-            showToast('下载失败，请重试', 'error');
-        };
-        
-        document.body.appendChild(link);
-        link.click();
-        
-        setTimeout(() => {
-            try {
-                document.body.removeChild(link);
-            } catch (e) {
-                console.warn('移除下载链接失败:', e);
-            }
+// 触发浏览器下载
+function triggerBrowserDownload(url, filename) {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => {
+        document.body.removeChild(link);
         }, 100);
-        
-        console.log('下载链接已触�?);
-    } catch (error) {
-        console.error('触发下载失败:', error);
-        showToast('下载失败: ' + error.message, 'error');
-    }
 }
 
 // ==================== 设置功能 ====================
@@ -393,7 +377,8 @@ function toggleSettings() {
     
     if (!sidebar || !overlay) return;
     
-    // �?HTML 使用 .active 类控制显�?    if (sidebar.classList.contains('active')) {
+    // 新 HTML 使用 .active 类控制显示
+    if (sidebar.classList.contains('active')) {
         sidebar.classList.remove('active');
         overlay.classList.add('hidden');
     } else {
@@ -469,7 +454,8 @@ function setTheme(theme) {
 function applyTheme() {
     let isDark = true;
     
-    // 优先使用 appState（新 HTML），否则使用 appSettings（旧 HTML�?    const theme = appState ? appState.theme : (appSettings ? appSettings.theme : 'light');
+    // 优先使用 appState（新 HTML），否则使用 appSettings（旧 HTML）
+    const theme = appState ? appState.theme : (appSettings ? appSettings.theme : 'light');
     
     if (theme === 'light') {
         isDark = false;
@@ -495,10 +481,11 @@ function updateInputHint() {
     const linkCountEl = document.getElementById('linkCount');
     const linkNumEl = document.getElementById('linkNum');
     
-    // 新HTML可能没有这些元素，静默返�?    if (!hintEl) return;
+    // 新HTML可能没有这些元素，静默返回
+    if (!hintEl) return;
     
     if (!input) {
-        hintEl.innerHTML = '<i class="fas fa-info-circle"></i> <span>粘贴B站链接、收藏夹ID或多个链接自动识�?/span>';
+        hintEl.innerHTML = '<i class="fas fa-info-circle"></i> <span>粘贴B站链接、收藏夹ID或多个链接自动识别</span>';
         if (linkCountEl) linkCountEl.classList.add('hidden');
         return;
     }
@@ -520,16 +507,17 @@ function updateInputHint() {
             if (linkNumEl) linkNumEl.textContent = inputType.urls.length;
             break;
         case 'single':
-            hintEl.innerHTML = `<i class="fab fa-bilibili" style="color: var(--bilibili-pink);"></i> <span>检测到B站视频链�?/span>`;
+            hintEl.innerHTML = `<i class="fab fa-bilibili" style="color: var(--bilibili-pink);"></i> <span>检测到B站视频链接</span>`;
             if (linkCountEl) linkCountEl.classList.add('hidden');
             break;
         default:
-            hintEl.innerHTML = `<i class="fas fa-question-circle" style="color: var(--warning-color);"></i> <span>请输入B站视频链接、收藏夹或UP主主�?/span>`;
+            hintEl.innerHTML = `<i class="fas fa-question-circle" style="color: var(--warning-color);"></i> <span>请输入B站视频链接、收藏夹或UP主主页</span>`;
             if (linkCountEl) linkCountEl.classList.add('hidden');
     }
 }
 
-// 检测输入类�?function detectInputType(input) {
+// 检测输入类型
+function detectInputType(input) {
     // 检查收藏夹
     const mlMatch = input.match(/ml(\d+)/i);
     const fidMatch = input.match(/fid=(\d+)/);
@@ -540,7 +528,8 @@ function updateInputHint() {
         return { type: 'favorites', id };
     }
     
-    // 检查UP主主�?    const spaceMatch = input.match(/space\.bilibili\.com\/(\d+)/);
+    // 检查UP主主页
+    const spaceMatch = input.match(/space\.bilibili\.com\/(\d+)/);
     if (spaceMatch) {
         return { type: 'user', uid: spaceMatch[1] };
     }
@@ -556,27 +545,31 @@ function updateInputHint() {
         return { type: 'single', url: urls[0] };
     }
     
-    // 检查是否是纯数字（可能是收藏夹ID�?    if (/^\d+$/.test(input) && input.length > 5) {
+    // 检查是否是纯数字（可能是收藏夹ID）
+    if (/^\d+$/.test(input) && input.length > 5) {
         return { type: 'favorites', id: input };
     }
     
     return { type: 'unknown' };
 }
 
-// 提取B站链�?- 支持换行、空格、逗号等分隔，以及连在一起的多个链接
+// 提取B站链接 - 支持换行、空格、逗号等分隔，以及连在一起的多个链接
 function extractBilibiliUrls(text) {
     const urls = new Set();
     
-    // 🔧 预处理：在每�?https:// �?http:// 前添加空格，解决链接连在一起的问题
-    // 例如: "...clickhttps://..." �?"...click https://..."
+    // 🔧 预处理：在每个 https:// 或 http:// 前添加空格，解决链接连在一起的问题
+    // 例如: "...clickhttps://..." → "...click https://..."
     let processedText = text.replace(/(https?:\/\/)/gi, ' $1');
     
-    // 提取所�?BV 号（BV + 10位字符）⚠️ 保持原始大小写！BV号是大小写敏感的�?    const bvMatches = processedText.matchAll(/BV[a-zA-Z0-9]{10}/g); // 不用 gi，保持大小写
+    // 提取所有 BV 号（BV + 10位字符）⚠️ 保持原始大小写！BV号是大小写敏感的！
+    const bvMatches = processedText.matchAll(/BV[a-zA-Z0-9]{10}/g); // 不用 gi，保持大小写
     for (const match of bvMatches) {
-        const bv = match[0]; // 保持原始大小�?        urls.add(`https://www.bilibili.com/video/${bv}`);
+        const bv = match[0]; // 保持原始大小写
+        urls.add(`https://www.bilibili.com/video/${bv}`);
     }
     
-    // 提取 av �?    const avMatches = processedText.matchAll(/av(\d+)/gi);
+    // 提取 av 号
+    const avMatches = processedText.matchAll(/av(\d+)/gi);
     for (const match of avMatches) {
         urls.add(`https://www.bilibili.com/video/av${match[1]}`);
     }
@@ -618,7 +611,8 @@ async function handleSmartParse() {
             await handleSingleParse(inputType.url);
             break;
         default:
-            // 尝试作为单链接解�?            const urls = extractBilibiliUrls(input);
+            // 尝试作为单链接解析
+            const urls = extractBilibiliUrls(input);
             if (urls.length > 0) {
                 if (urls.length === 1) {
                     await handleSingleParse(urls[0]);
@@ -626,17 +620,19 @@ async function handleSmartParse() {
                     await handleMultiParse(urls);
                 }
             } else {
-                showToast('无法识别输入内容，请检查是否为B站链�?, 'error');
+                showToast('无法识别输入内容，请检查是否为B站链接', 'error');
             }
     }
 }
 
-// 单链接解�?async function handleSingleParse(url) {
-    // 显示加载状�?    loadingSection.classList.remove('hidden');
+// 单链接解析
+async function handleSingleParse(url) {
+    // 显示加载状态
+    loadingSection.classList.remove('hidden');
     resultSection.classList.add('hidden');
     document.getElementById('batchResultSection')?.classList.add('hidden');
     errorSection.classList.add('hidden');
-    document.getElementById('loadingText').textContent = '正在解析中，请稍�?..';
+    document.getElementById('loadingText').textContent = '正在解析中，请稍候...';
     document.getElementById('loadingProgress')?.classList.add('hidden');
     parseBtn.disabled = true;
 
@@ -667,21 +663,22 @@ async function handleSmartParse() {
 
 async function handleMultiParse(urls) {
     if (!urls || urls.length === 0) {
-        showToast('请输入至少一个有效链�?, 'error');
+        showToast('请输入至少一个有效链接', 'error');
         return;
     }
     
     if (urls.length > 50) {
-        showToast('单次最多解�?0个链�?, 'error');
+        showToast('单次最多解析50个链接', 'error');
         return;
     }
     
-    // 显示加载状�?    loadingSection.classList.remove('hidden');
+    // 显示加载状态
+    loadingSection.classList.remove('hidden');
     resultSection.classList.add('hidden');
     document.getElementById('batchResultSection')?.classList.add('hidden');
     errorSection.classList.add('hidden');
     
-    document.getElementById('loadingText').textContent = '正在批量解析�?..';
+    document.getElementById('loadingText').textContent = '正在批量解析中...';
     const progressEl = document.getElementById('loadingProgress');
     if (progressEl) progressEl.classList.remove('hidden');
     
@@ -747,14 +744,17 @@ async function handleMultiParse(urls) {
     displayBatchResults(successCount, failedCount);
 }
 
-// 显示批量解析结果（适配�?HTML�?function displayBatchResults(successCount, failedCount) {
-    // 尝试�?HTML 的元�?ID，如果不存在则使用旧�?    const batchSectionEl = document.getElementById('batchSection') || document.getElementById('batchResultSection');
+// 显示批量解析结果（适配新 HTML）
+function displayBatchResults(successCount, failedCount) {
+    // 尝试新 HTML 的元素 ID，如果不存在则使用旧的
+    const batchSectionEl = document.getElementById('batchSection') || document.getElementById('batchResultSection');
     const batchListEl = document.getElementById('batchList') || document.getElementById('batchResultList');
     const batchCountEl = document.getElementById('batchCount');
     
     if (batchCountEl) batchCountEl.textContent = batchResults.length;
     
-    // 隐藏单视频结果区�?    if (resultSection) resultSection.classList.add('hidden');
+    // 隐藏单视频结果区域
+    if (resultSection) resultSection.classList.add('hidden');
     
     if (!batchListEl) return;
     
@@ -805,12 +805,14 @@ async function handleMultiParse(urls) {
         batchSectionEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
     
-    // 如果设置了自动下�?    if (appSettings && appSettings.autoDownload && successCount > 0) {
+    // 如果设置了自动下载
+    if (appSettings && appSettings.autoDownload && successCount > 0) {
         setTimeout(() => downloadAllBatch(), 500);
     }
 }
 
-// 下载批量解析的单个项�?async function downloadBatchItem(index) {
+// 下载批量解析的单个项目
+async function downloadBatchItem(index) {
     const result = batchResults[index];
     if (!result || !result.success) return;
     
@@ -818,10 +820,12 @@ async function handleMultiParse(urls) {
     const safeTitle = formatFilename ? formatFilename(data, result.url) : (data.title || 'video').replace(/[<>:"/\\|?*]/g, '_');
     const encodedUrl = encodeURIComponent(result.url);
     
-    // 使用 appState（新 HTML）或 presetFormat/presetQuality（旧 HTML�?    const format = appState ? appState.format : presetFormat;
+    // 使用 appState（新 HTML）或 presetFormat/presetQuality（旧 HTML）
+    const format = appState ? appState.format : presetFormat;
     const quality = appState ? appState.quality : presetQuality;
     
-    // 更新状态为下载�?    const listItem = document.querySelector(`.batch-item[data-index="${index}"]`) || document.querySelector(`.batch-result-item[data-index="${index}"]`);
+    // 更新状态为下载中
+    const listItem = document.querySelector(`.batch-item[data-index="${index}"]`) || document.querySelector(`.batch-result-item[data-index="${index}"]`);
     if (listItem) {
         listItem.classList.add('downloading');
     }
@@ -840,14 +844,16 @@ async function handleMultiParse(urls) {
                 const downloadUrl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${quality}&type=video`;
                 triggerBrowserDownload(downloadUrl, `${safeTitle}_video.${videoFormat}`);
             } else if (format === 'video+audio-separate') {
-                // 分离下载：先视频后音�?                const videoUrl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${quality}&type=video`;
+                // 分离下载：先视频后音频
+                const videoUrl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${quality}&type=video`;
                 triggerBrowserDownload(videoUrl, `${safeTitle}_video.${videoFormat}`);
                 // 延迟下载音频
                 await new Promise(resolve => setTimeout(resolve, 800));
                 const audioUrl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${quality}&type=audio`;
                 triggerBrowserDownload(audioUrl, `${safeTitle}_audio.${audioFormat}`);
             } else {
-                // 视音合体：使用选择的视频格�?                const downloadUrl = `${API_BASE_URL}/api/bilibili/download?url=${encodedUrl}&qn=${quality}&format=${videoFormat}`;
+                // 视音合体：使用选择的视频格式
+                const downloadUrl = `${API_BASE_URL}/api/bilibili/download?url=${encodedUrl}&qn=${quality}&format=${videoFormat}`;
                 triggerBrowserDownload(downloadUrl, `${safeTitle}.${videoFormat}`);
             }
         
@@ -856,7 +862,7 @@ async function handleMultiParse(urls) {
             listItem.classList.add('downloaded');
         }
         
-        showToast('开始下�?..', 'success');
+        showToast('开始下载...', 'success');
     } catch (error) {
         console.error('下载失败:', error);
         if (listItem) {
@@ -866,7 +872,8 @@ async function handleMultiParse(urls) {
     }
 }
 
-// 重试失败的项�?async function retryBatchItem(index) {
+// 重试失败的项目
+async function retryBatchItem(index) {
     const result = batchResults[index];
     if (!result) return;
     
@@ -896,9 +903,10 @@ async function handleMultiParse(urls) {
                 url: result.url,
                 data: data.data
             };
-            showToast('解析成功�?, 'success');
+            showToast('解析成功！', 'success');
             
-            // 更新列表�?            if (batchListEl && batchListEl.children[index]) {
+            // 更新列表项
+            if (batchListEl && batchListEl.children[index]) {
                 const resultData = data.data;
                 let thumbnailUrl = resultData.thumbnail || '';
                 if (thumbnailUrl.startsWith('//')) thumbnailUrl = 'https:' + thumbnailUrl;
@@ -925,7 +933,8 @@ async function handleMultiParse(urls) {
             };
             showToast('解析仍然失败', 'error');
             
-            // 更新列表项显示错�?            if (batchListEl && batchListEl.children[index]) {
+            // 更新列表项显示错误
+            if (batchListEl && batchListEl.children[index]) {
                 batchListEl.children[index].innerHTML = `
                     <div class="batch-info">
                         <div class="batch-title">${escapeHtml(result.url)}</div>
@@ -948,7 +957,8 @@ async function handleMultiParse(urls) {
     } catch (error) {
         showToast('重试失败: ' + error.message, 'error');
         
-        // 更新列表项显示错�?        const batchListEl = document.getElementById('batchList');
+        // 更新列表项显示错误
+        const batchListEl = document.getElementById('batchList');
         if (batchListEl && batchListEl.children[index]) {
             batchListEl.children[index].innerHTML = `
                 <div class="batch-info">
@@ -965,7 +975,8 @@ async function handleMultiParse(urls) {
 
 // 全部下载
 async function downloadAllBatch() {
-    // 获取成功项及其原始索�?    const successItems = [];
+    // 获取成功项及其原始索引
+    const successItems = [];
     batchResults.forEach((r, idx) => {
         if (r.success) {
             successItems.push({ ...r, originalIndex: idx });
@@ -986,9 +997,10 @@ async function downloadAllBatch() {
     
     progressSection.classList.remove('hidden');
     downloadBtn.disabled = true;
-    downloadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 下载�?..';
+    downloadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 下载中...';
     
-    // 获取当前预设（统一使用 appState�?    const format = appState ? appState.format : presetFormat;
+    // 获取当前预设（统一使用 appState）
+    const format = appState ? appState.format : presetFormat;
     const quality = appState ? appState.quality : presetQuality;
     
     // 逐个下载
@@ -1003,7 +1015,8 @@ async function downloadAllBatch() {
         if (progressText) progressText.textContent = `${i + 1}/${successItems.length}`;
         if (currentInfo) currentInfo.textContent = `正在下载: ${data.title || '未知视频'}`;
         
-        // 更新列表项状态（使用原始索引�?        const listItem = document.querySelector(`.batch-result-item[data-index="${item.originalIndex}"]`) || 
+        // 更新列表项状态（使用原始索引）
+        const listItem = document.querySelector(`.batch-result-item[data-index="${item.originalIndex}"]`) || 
                          document.querySelector(`.batch-item[data-index="${item.originalIndex}"]`);
         if (listItem) {
             listItem.classList.remove('downloaded', 'download-failed');
@@ -1013,7 +1026,8 @@ async function downloadAllBatch() {
         try {
             const safeTitle = formatFilename ? formatFilename(data, item.url) : (data.title || 'video').replace(/[<>:"/\\|?*]/g, '_');
             
-            // 根据预设格式下载（使用统一�?format、quality、videoFormat、audioFormat�?            const videoFormat = appState.videoFormat || 'mp4';
+            // 根据预设格式下载（使用统一的 format、quality、videoFormat、audioFormat）
+            const videoFormat = appState.videoFormat || 'mp4';
             const audioFormat = appState.audioFormat || 'mp3';
             
             if (format === 'audio') {
@@ -1033,11 +1047,13 @@ async function downloadAllBatch() {
                 const audioUrl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${quality}&type=audio`;
                 triggerBrowserDownload(audioUrl, `${safeTitle}_audio.${audioFormat}`);
             } else {
-                // 视音合体：使用选择的视频格�?                const downloadUrl = `${API_BASE_URL}/api/bilibili/download?url=${encodedUrl}&qn=${quality}&format=${videoFormat}`;
+                // 视音合体：使用选择的视频格式
+                const downloadUrl = `${API_BASE_URL}/api/bilibili/download?url=${encodedUrl}&qn=${quality}&format=${videoFormat}`;
                 triggerBrowserDownload(downloadUrl, `${safeTitle}.${videoFormat}`);
             }
             
-            // 等待一小段时间确保下载开�?            await new Promise(resolve => setTimeout(resolve, 500));
+            // 等待一小段时间确保下载开始
+            await new Promise(resolve => setTimeout(resolve, 500));
             
             if (listItem) {
                 listItem.classList.remove('downloading');
@@ -1067,7 +1083,7 @@ async function downloadAllBatch() {
         progressSection.classList.add('hidden');
     }, 3000);
     
-    showToast(`已发�?${successItems.length} 个视频的下载`, 'success');
+    showToast(`已发起 ${successItems.length} 个视频的下载`, 'success');
 }
 
 // 获取下载类型和扩展名
@@ -1088,7 +1104,7 @@ function getDownloadTypeAndExt() {
         downloadType = 'separate';
         fileExt = 'm4s'; // 视频部分
     } else {
-        // video+audio 合并，需�?ffmpeg
+        // video+audio 合并，需要 ffmpeg
         downloadType = 'merged';
         fileExt = 'mp4';
     }
@@ -1146,10 +1162,10 @@ function clearBatchResults() {
     document.getElementById('batchResultSection')?.classList.add('hidden');
     document.getElementById('multiVideoUrls').value = '';
     updateLinkCount();
-    showToast('已清�?, 'success');
+    showToast('已清空', 'success');
 }
 
-// ==================== 收藏夹解�?====================
+// ==================== 收藏夹解析 ====================
 
 async function handleFavoritesParse(favId) {
     if (!favId) {
@@ -1165,7 +1181,7 @@ async function handleFavoritesParse(favId) {
     if (errorSection) errorSection.classList.add('hidden');
     
     const loadingTextEl = document.getElementById('loadingText');
-    if (loadingTextEl) loadingTextEl.textContent = '正在解析收藏�?..';
+    if (loadingTextEl) loadingTextEl.textContent = '正在解析收藏夹...';
     const progressEl = document.getElementById('loadingProgress');
     if (progressEl) progressEl.classList.add('hidden');
     
@@ -1179,7 +1195,8 @@ async function handleFavoritesParse(favId) {
         const data = await response.json();
         
         if (data.success && data.videos) {
-            // 转换为批量结果格�?            batchResults = data.videos.map(video => ({
+            // 转换为批量结果格式
+            batchResults = data.videos.map(video => ({
                 success: true,
                 url: video.url,
                 data: {
@@ -1187,12 +1204,13 @@ async function handleFavoritesParse(favId) {
                     author: video.author,
                     thumbnail: video.thumbnail,
                     duration: video.duration,
-                    platform: 'B�?,
+                    platform: 'B站',
                     bvid: video.bvid
                 }
             }));
             
-            // 显示批量结果（适配�?HTML�?            const batchSectionEl = document.getElementById('batchSection');
+            // 显示批量结果（适配新 HTML）
+            const batchSectionEl = document.getElementById('batchSection');
             const batchListEl = document.getElementById('batchList');
             const batchCountEl = document.getElementById('batchCount');
             
@@ -1227,7 +1245,7 @@ async function handleFavoritesParse(favId) {
             
             showToast(`成功解析 ${data.videos.length} 个视频`, 'success');
         } else {
-            throw new Error(data.error || '解析收藏夹失�?);
+            throw new Error(data.error || '解析收藏夹失败');
         }
         
     } catch (error) {
@@ -1238,7 +1256,7 @@ async function handleFavoritesParse(favId) {
     }
 }
 
-// ==================== UP主投稿解�?====================
+// ==================== UP主投稿解析 ====================
 
 async function handleUserVideosParse(uid) {
     if (!uid) {
@@ -1254,7 +1272,7 @@ async function handleUserVideosParse(uid) {
     if (errorSection) errorSection.classList.add('hidden');
     
     const loadingTextEl = document.getElementById('loadingText');
-    if (loadingTextEl) loadingTextEl.textContent = '正在获取UP主投�?..';
+    if (loadingTextEl) loadingTextEl.textContent = '正在获取UP主投稿...';
     const progressEl = document.getElementById('loadingProgress');
     if (progressEl) progressEl.classList.add('hidden');
     
@@ -1268,7 +1286,8 @@ async function handleUserVideosParse(uid) {
         const data = await response.json();
         
         if (data.success && data.videos) {
-            // 转换为批量结果格�?            batchResults = data.videos.map(video => ({
+            // 转换为批量结果格式
+            batchResults = data.videos.map(video => ({
                 success: true,
                 url: video.url,
                 data: {
@@ -1276,12 +1295,13 @@ async function handleUserVideosParse(uid) {
                     author: video.author,
                     thumbnail: video.thumbnail,
                     duration: video.duration,
-                    platform: 'B�?,
+                    platform: 'B站',
                     bvid: video.bvid
                 }
             }));
             
-            // 显示批量结果（适配�?HTML�?            const batchSectionEl = document.getElementById('batchSection');
+            // 显示批量结果（适配新 HTML）
+            const batchSectionEl = document.getElementById('batchSection');
             const batchListEl = document.getElementById('batchList');
             const batchCountEl = document.getElementById('batchCount');
             
@@ -1316,7 +1336,7 @@ async function handleUserVideosParse(uid) {
             
             showToast(`成功获取 ${data.videos.length} 个视频`, 'success');
         } else {
-            throw new Error(data.error || '获取UP主投稿失�?);
+            throw new Error(data.error || '获取UP主投稿失败');
         }
         
     } catch (error) {
@@ -1327,7 +1347,7 @@ async function handleUserVideosParse(uid) {
     }
 }
 
-// ==================== GitHub Gist 云公�?====================
+// ==================== GitHub Gist 云公告 ====================
 
 async function loadGistAnnouncement() {
     try {
@@ -1348,7 +1368,8 @@ async function loadGistAnnouncement() {
         
         if (!file || !file.content) return;
         
-        // 解析 JSON 格式的公�?        let announcementInfo;
+        // 解析 JSON 格式的公告
+        let announcementInfo;
         try {
             announcementInfo = JSON.parse(file.content);
         } catch (e) {
@@ -1361,13 +1382,16 @@ async function loadGistAnnouncement() {
             };
         }
         
-        // 检查公告是否激�?        if (!announcementInfo.isActive) return;
+        // 检查公告是否激活
+        if (!announcementInfo.isActive) return;
         
-        // 检查是否是新公告（通过版本ID比较�?        const cachedVersion = localStorage.getItem(GIST_CONFIG.cacheKey);
+        // 检查是否是新公告（通过版本ID比较）
+        const cachedVersion = localStorage.getItem(GIST_CONFIG.cacheKey);
         const currentVersion = announcementInfo.id || gistData.updated_at;
         const isNewAnnouncement = cachedVersion !== currentVersion;
         
-        // 检查今日是否不再显示（仅对同一版本公告有效�?        const dontShowToday = localStorage.getItem('gistDontShowDate');
+        // 检查今日是否不再显示（仅对同一版本公告有效）
+        const dontShowToday = localStorage.getItem('gistDontShowDate');
         const dontShowVersion = localStorage.getItem('gistDontShowVersion');
         const today = new Date().toDateString();
         
@@ -1462,14 +1486,16 @@ function renderMarkdown(text) {
         .replace(/^### (.*$)/gm, '<h3>$1</h3>')
         .replace(/^## (.*$)/gm, '<h2>$1</h2>')
         .replace(/^# (.*$)/gm, '<h1>$1</h1>')
-        // 粗体和斜�?        .replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>')
+        // 粗体和斜体
+        .replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>')
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.*?)\*/g, '<em>$1</em>')
         // 链接
         .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
         // 图片
         .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">')
-        // 代码�?        .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+        // 代码块
+        .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
         // 行内代码
         .replace(/`([^`]+)`/g, '<code>$1</code>')
         // 引用
@@ -1477,12 +1503,14 @@ function renderMarkdown(text) {
         // 无序列表
         .replace(/^\- (.*$)/gm, '<li>$1</li>')
         .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
-        // 分隔�?        .replace(/^---$/gm, '<hr>')
+        // 分隔线
+        .replace(/^---$/gm, '<hr>')
         // 换行
         .replace(/\n/g, '<br>');
 }
 
-// 检查登录状�?async function checkLoginStatus() {
+// 检查登录状态
+async function checkLoginStatus() {
     try {
         const response = await fetch(`${API_BASE_URL}/api/bilibili/status`, {
             credentials: 'include'
@@ -1496,7 +1524,7 @@ function renderMarkdown(text) {
             updateLoginUI();
         }
     } catch (error) {
-        console.log('登录状态检查失�?);
+        console.log('登录状态检查失败');
     }
 }
 
@@ -1526,7 +1554,8 @@ function updateLoginUI() {
         
         userAvatar.src = avatarUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="%23ccc"/><text x="12" y="16" text-anchor="middle" fill="%23999" font-size="12">头像</text></svg>';
         userAvatar.onerror = function() {
-            // 头像加载失败时使用默认头�?            this.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="%23ccc"/><text x="12" y="16" text-anchor="middle" fill="%23999" font-size="12">头像</text></svg>';
+            // 头像加载失败时使用默认头像
+            this.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="%23ccc"/><text x="12" y="16" text-anchor="middle" fill="%23999" font-size="12">头像</text></svg>';
         };
         
         userName.textContent = userInfo.name || '用户';
@@ -1541,7 +1570,8 @@ function updateLoginUI() {
         userInfoEl.classList.add('hidden');
     }
     
-    // 更新预设选项中的VIP状�?    updatePresetVipStatus();
+    // 更新预设选项中的VIP状态
+    updatePresetVipStatus();
 }
 
 // 显示登录弹窗
@@ -1558,11 +1588,12 @@ function closeLoginModal() {
     }
 }
 
-// 获取登录二维码（适配�?HTML�?async function getQRCode() {
-    // �?HTML 使用的元�?ID
+// 获取登录二维码（适配新 HTML）
+async function getQRCode() {
+    // 新 HTML 使用的元素 ID
     const qrImg = document.getElementById('qrImg');
     const qrText = document.getElementById('qrText');
-    // �?HTML 使用的元�?ID（兼容）
+    // 旧 HTML 使用的元素 ID（兼容）
     const qrcodeLoading = document.getElementById('qrcodeLoading');
     const qrcodeImg = document.getElementById('qrcodeImg');
     const qrcodeExpired = document.getElementById('qrcodeExpired');
@@ -1577,7 +1608,7 @@ function closeLoginModal() {
     if (qrcodeLoading) qrcodeLoading.classList.remove('hidden');
     if (qrcodeImg) qrcodeImg.classList.add('hidden');
     if (qrcodeExpired) qrcodeExpired.classList.add('hidden');
-    if (loginStatusText) loginStatusText.textContent = '正在获取二维�?..';
+    if (loginStatusText) loginStatusText.textContent = '正在获取二维码...';
     
     try {
         const response = await fetch(`${API_BASE_URL}/api/bilibili/qrcode`);
@@ -1597,17 +1628,18 @@ function closeLoginModal() {
             }
             if (loginStatusText) loginStatusText.textContent = '请使用哔哩哔哩APP扫码';
             
-            // 开始轮询检查登录状�?            startQRCodeCheck(data.qrcodeKey);
+            // 开始轮询检查登录状态
+            startQRCodeCheck(data.qrcodeKey);
         } else {
-            throw new Error(data.error || '获取二维码失�?);
+            throw new Error(data.error || '获取二维码失败');
         }
     } catch (error) {
         if (qrText) {
             qrText.style.display = 'block';
-            qrText.textContent = '获取二维码失败，请重�?;
+            qrText.textContent = '获取二维码失败，请重试';
         }
         if (qrcodeLoading) qrcodeLoading.classList.add('hidden');
-        if (loginStatusText) loginStatusText.textContent = '获取二维码失败，请重�?;
+        if (loginStatusText) loginStatusText.textContent = '获取二维码失败，请重试';
         showToast(error.message, 'error');
     }
 }
@@ -1616,13 +1648,15 @@ function refreshQRCode() {
     getQRCode();
 }
 
-// 轮询检查二维码状态（适配�?HTML�?function startQRCodeCheck(qrcodeKey) {
+// 轮询检查二维码状态（适配新 HTML）
+function startQRCodeCheck(qrcodeKey) {
     if (qrCheckInterval) clearInterval(qrCheckInterval);
     
     let checkCount = 0;
     const maxChecks = 180; // 3分钟超时
     
-    // 更新二维码状态显�?    const updateQrStatus = (status, message) => {
+    // 更新二维码状态显示
+    const updateQrStatus = (status, message) => {
         const qrImg = document.getElementById('qrImg');
         const qrText = document.getElementById('qrText');
         const qrcodeImg = document.getElementById('qrcodeImg');
@@ -1641,13 +1675,13 @@ function refreshQRCode() {
         } else if (status === 'scanned') {
             if (qrText) {
                 qrText.style.display = 'block';
-                qrText.textContent = '�?已扫码，请在手机上确�?;
+                qrText.textContent = '✓ 已扫码，请在手机上确认';
                 qrText.style.color = '#52c41a';
             }
         } else if (status === 'success') {
             if (qrText) {
                 qrText.style.display = 'block';
-                qrText.textContent = '�?登录成功�?;
+                qrText.textContent = '✓ 登录成功！';
                 qrText.style.color = '#52c41a';
             }
         }
@@ -1667,7 +1701,7 @@ function refreshQRCode() {
             const response = await fetch(`${API_BASE_URL}/api/bilibili/qrcode/check?key=${qrcodeKey}`);
             const data = await response.json();
             
-            console.log('二维码状态检�?', data); // 调试日志
+            console.log('二维码状态检查:', data); // 调试日志
             
             // 处理成功响应
             if (data.success) {
@@ -1676,11 +1710,11 @@ function refreshQRCode() {
                         // 等待扫码，无需更新UI
                         break;
                     case 'scanned':
-                        updateQrStatus('scanned', '已扫码，请在手机上确�?);
+                        updateQrStatus('scanned', '已扫码，请在手机上确认');
                         break;
                     case 'confirmed':
                         clearInterval(qrCheckInterval);
-                        updateQrStatus('success', '登录成功�?);
+                        updateQrStatus('success', '登录成功！');
                         isLoggedIn = true;
                         isVip = data.isVip || false;
                         userInfo = data.userInfo;
@@ -1689,9 +1723,10 @@ function refreshQRCode() {
                         updateLoginUI();
                         closeLoginModal();
                         
-                        showToast('登录成功�?, 'success');
+                        showToast('登录成功！', 'success');
                         
-                        // 不再刷新页面，保持解析搜索结�?                        break;
+                        // 不再刷新页面，保持解析搜索结果
+                        break;
                     case 'expired':
                         clearInterval(qrCheckInterval);
                         updateQrStatus('expired', '二维码已过期，请点击刷新');
@@ -1699,23 +1734,25 @@ function refreshQRCode() {
                 }
             } else {
                 // 处理错误响应
-                console.error('二维码检查失�?', data.error);
+                console.error('二维码检查失败:', data.error);
                 if (data.error && data.error.includes('过期')) {
                     clearInterval(qrCheckInterval);
                     updateQrStatus('expired', '二维码已过期，请点击刷新');
                 }
             }
         } catch (error) {
-            console.error('检查登录状态失�?', error);
-            // 网络错误不立即停止轮询，可能是临时问�?        }
+            console.error('检查登录状态失败:', error);
+            // 网络错误不立即停止轮询，可能是临时问题
+        }
     }, 2000); // 改为2秒轮询一次，减少请求频率
 }
 
-// 退出登�?async function logout() {
+// 退出登录
+async function logout() {
     try {
         await fetch(`${API_BASE_URL}/api/bilibili/logout`, { method: 'POST', credentials: 'include' });
     } catch (error) {
-        console.error('退出登录失�?', error);
+        console.error('退出登录失败:', error);
     }
     
     isLoggedIn = false;
@@ -1725,9 +1762,10 @@ function refreshQRCode() {
     // 更新UI但不刷新页面（保持搜索结果）
     updateLoginUI();
     
-    showToast('已退出登�?, 'success');
+    showToast('已退出登录', 'success');
     
-    // 不再刷新页面，保持解析搜索结�?}
+    // 不再刷新页面，保持解析搜索结果
+}
 
 // 解析视频 (保留为兼容方法，实际使用 handleSmartParse)
 async function handleParse() {
@@ -1736,7 +1774,8 @@ async function handleParse() {
 
 // 显示解析结果
 async function displayResult(result) {
-    // 重新检查登录状态（确保状态是最新的�?    await checkLoginStatus();
+    // 重新检查登录状态（确保状态是最新的）
+    await checkLoginStatus();
     
     // 保存当前视频数据，供下载使用
     currentVideoData = result;
@@ -1765,7 +1804,7 @@ async function displayResult(result) {
         
         coverImg.src = thumbnailUrl;
         coverImg.onerror = () => {
-            coverImg.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 9"><rect fill="%23334155" width="16" height="9"/><text x="8" y="5" text-anchor="middle" fill="%23666" font-size="2">无封�?/text></svg>';
+            coverImg.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 9"><rect fill="%23334155" width="16" height="9"/><text x="8" y="5" text-anchor="middle" fill="%23666" font-size="2">无封面</text></svg>';
         };
     }
     
@@ -1781,7 +1820,8 @@ async function displayResult(result) {
     // 更新预设信息显示
     updatePresetInfoDisplay();
 
-    // 隐藏错误区域和批量结果区�?    errorSection.classList.add('hidden');
+    // 隐藏错误区域和批量结果区域
+    errorSection.classList.add('hidden');
     document.getElementById('batchResultSection')?.classList.add('hidden');
     
     // 显示结果区域
@@ -1800,14 +1840,16 @@ function generateQualityList(result) {
     const qualityList = document.getElementById('qualityList');
     qualityList.innerHTML = '';
     
-    // 从后端获取所有画质选项（后端已返回完整列表�?    const availableQualities = result.downloadLinks || [];
+    // 从后端获取所有画质选项（后端已返回完整列表）
+    const availableQualities = result.downloadLinks || [];
     
     if (availableQualities.length === 0) {
         qualityList.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-secondary);">暂无可用画质</div>';
         return;
     }
     
-    // 按画质从高到低排�?    const sortedQualities = [...availableQualities].sort((a, b) => (b.qn || 0) - (a.qn || 0));
+    // 按画质从高到低排序
+    const sortedQualities = [...availableQualities].sort((a, b) => (b.qn || 0) - (a.qn || 0));
     
     // 找到默认选中的画质（优先选择1080P，如果不可用则选择最高可用画质）
     let defaultQn = null;
@@ -1820,7 +1862,8 @@ function generateQualityList(result) {
         }
     }
     
-    // 如果没有找到可用�?080P，选择最高可用画�?    if (!defaultQn) {
+    // 如果没有找到可用的1080P，选择最高可用画质
+    if (!defaultQn) {
         const firstAvailable = sortedQualities.find(q => {
             const needVip = q.needVip !== undefined ? q.needVip : (q.qn > 80);
             const exists = q.exists !== undefined ? q.exists : true;
@@ -1845,7 +1888,9 @@ function generateQualityList(result) {
         const exists = quality.exists !== undefined ? quality.exists : true; // 默认认为存在
         const qualityName = quality.quality || getQualityName(qn);
         
-        // 判断是否可以下载�?        // 1. 画质必须存在（exists为true�?        // 2. 不需要VIP，或者需要VIP但用户已登录且是VIP
+        // 判断是否可以下载：
+        // 1. 画质必须存在（exists为true）
+        // 2. 不需要VIP，或者需要VIP但用户已登录且是VIP
         const canDownload = exists && (!needVip || (isLoggedIn && isVip));
         const isSelected = qn === defaultQn && canDownload;
         
@@ -1859,37 +1904,40 @@ function generateQualityList(result) {
         item.dataset.needVip = needVip;
         item.dataset.exists = exists;
         
-        // 显示状态文本（不显�?不可�?�?        let statusText = '';
+        // 显示状态文本（不显示"不可用"）
+        let statusText = '';
         if (!exists) {
-            // 不显�?不可�?，只通过禁用状态表�?            statusText = '';
+            // 不显示"不可用"，只通过禁用状态表示
+            statusText = '';
         } else if (!canDownload) {
             if (needVip && !isLoggedIn) {
-                statusText = '需要登�?;
+                statusText = '需要登录';
             } else if (needVip && !isVip) {
                 statusText = '需要大会员';
             } else {
-                statusText = '需要登�?;
+                statusText = '需要登录';
             }
         }
         
         // 滑动条布局
         item.innerHTML = `
             <span class="quality-name">${qualityName}</span>
-            ${needVip ? '<span class="quality-tag vip">大会�?/span>' : '<span class="quality-tag free">免费</span>'}
+            ${needVip ? '<span class="quality-tag vip">大会员</span>' : '<span class="quality-tag free">免费</span>'}
             ${statusText ? `<span class="quality-status">${statusText}</span>` : ''}
         `;
         
-        // 所有画质都可以点击，但禁用画质会显示提�?        item.addEventListener('click', () => {
+        // 所有画质都可以点击，但禁用画质会显示提示
+        item.addEventListener('click', () => {
             if (canDownload) {
                 selectQuality(item, qn);
             } else {
                 if (!exists) {
-                    showToast('此视频不支持该画�?, 'error');
+                    showToast('此视频不支持该画质', 'error');
                 } else if (needVip && !isLoggedIn) {
-                    showToast('请先登录B站账�?, 'error');
+                    showToast('请先登录B站账号', 'error');
                     showLoginModal();
                 } else if (needVip && !isVip) {
-                    showToast('此画质需要大会员，请登录大会员账�?, 'error');
+                    showToast('此画质需要大会员，请登录大会员账号', 'error');
                 } else {
                     showToast('请先登录', 'error');
                 }
@@ -1903,33 +1951,36 @@ function generateQualityList(result) {
 // 获取画质名称（辅助函数）
 function getQualityName(qn) {
     const qualityMap = {
-        127: '8K 超高�?,
+        127: '8K 超高清',
         126: '杜比视界',
         125: 'HDR 真彩',
         120: '4K 超清',
-        116: '1080P 60�?,
-        112: '1080P 高码�?,
+        116: '1080P 60帧',
+        112: '1080P 高码率',
         80: '1080P',
         74: '720P60',
         64: '720P',
         32: '480P',
         16: '360P'
     };
-    return qualityMap[qn] || `清晰�?${qn}`;
+    return qualityMap[qn] || `清晰度 ${qn}`;
 }
 
 // 选择格式
 function selectFormat(format, element) {
     selectedFormat = format;
     
-    // 更新按钮状�?    document.querySelectorAll('.format-slider-btn').forEach(btn => {
+    // 更新按钮状态
+    document.querySelectorAll('.format-slider-btn').forEach(btn => {
         btn.classList.remove('active');
     });
     element.classList.add('active');
     
-    // 更新滑动指示器位�?    updateSliderIndicator(element);
+    // 更新滑动指示器位置
+    updateSliderIndicator(element);
     
-    // 更新画质选择器显�?    const qualitySelector = document.getElementById('qualitySelector');
+    // 更新画质选择器显示
+    const qualitySelector = document.getElementById('qualitySelector');
     const downloadBtnText = document.getElementById('downloadBtnText');
     
     // 判断是否需要显示画质选择（有视频选项时显示）
@@ -1946,13 +1997,14 @@ function selectFormat(format, element) {
         'video+audio': '下载视频+音频合体',
         'video+audio-separate': '下载视频+音频分离',
         'audio': '下载音频',
-        'video-only': '下载视频（无音频�?,
+        'video-only': '下载视频（无音频）',
         'cover': '下载封面'
     };
     downloadBtnText.textContent = formatTexts[format] || '下载';
 }
 
-// 更新滑动指示器位�?function updateSliderIndicator(activeButton) {
+// 更新滑动指示器位置
+function updateSliderIndicator(activeButton) {
     const indicator = document.querySelector('.format-slider-indicator');
     const track = document.querySelector('.format-slider-track');
     
@@ -1966,7 +2018,8 @@ function selectFormat(format, element) {
     const left = buttonRect.left - trackRect.left;
     const width = buttonRect.width;
     
-    // 设置指示器的位置和宽�?    indicator.style.transform = `translateX(${left}px)`;
+    // 设置指示器的位置和宽度
+    indicator.style.transform = `translateX(${left}px)`;
     indicator.style.width = `${width}px`;
 }
 
@@ -1991,13 +2044,15 @@ function selectQuality(element, qn) {
         const trackWidth = track.clientWidth;
         const currentScroll = track.scrollLeft;
         
-        // 如果选中项在左侧不可见，滚动到左�?        if (itemLeft < currentScroll) {
+        // 如果选中项在左侧不可见，滚动到左侧
+        if (itemLeft < currentScroll) {
             track.scrollTo({
                 left: itemLeft - 10,
                 behavior: 'smooth'
             });
         }
-        // 如果选中项在右侧不可见，滚动到右�?        else if (itemRight > currentScroll + trackWidth) {
+        // 如果选中项在右侧不可见，滚动到右侧
+        else if (itemRight > currentScroll + trackWidth) {
             track.scrollTo({
                 left: itemRight - trackWidth + 10,
                 behavior: 'smooth'
@@ -2022,7 +2077,8 @@ async function downloadSelected() {
         const videoUrl = videoUrlInput.value.trim();
         const safeTitle = (currentVideoData.title || 'video').replace(/[<>:"/\\|?*]/g, '_');
         
-        // 检查画质是否可用（需要画质的格式�?        const needsQuality = selectedFormat !== 'cover';
+        // 检查画质是否可用（需要画质的格式）
+        const needsQuality = selectedFormat !== 'cover';
         if (needsQuality && !selectedQuality) {
             showToast('请先选择画质', 'error');
             downloadBtn.disabled = false;
@@ -2041,12 +2097,12 @@ async function downloadSelected() {
                 
                 if (!canDownload) {
                     if (!exists) {
-                        showToast('此视频不支持该画�?, 'error');
+                        showToast('此视频不支持该画质', 'error');
                     } else if (needVip && !isLoggedIn) {
-                        showToast('请先登录B站账�?, 'error');
+                        showToast('请先登录B站账号', 'error');
                         showLoginModal();
                     } else if (needVip && !isVip) {
-                        showToast('此画质需要大会员，请登录大会员账�?, 'error');
+                        showToast('此画质需要大会员，请登录大会员账号', 'error');
                     }
                     downloadBtn.disabled = false;
                     downloadBtn.innerHTML = originalText;
@@ -2062,7 +2118,7 @@ async function downloadSelected() {
         if (selectedFormat === 'cover') {
             // 下载封面
             if (!currentVideoData.thumbnail) {
-                showToast('该视频没有封�?, 'error');
+                showToast('该视频没有封面', 'error');
                 downloadBtn.disabled = false;
                 downloadBtn.innerHTML = originalText;
                 return;
@@ -2070,7 +2126,8 @@ async function downloadSelected() {
             const downloadUrl = `${API_BASE_URL}/api/bilibili/download/cover?url=${encodedUrl}`;
             downloadFile(downloadUrl, `${safeTitle}.jpg`);
         } else if (selectedFormat === 'video+audio-separate') {
-            // 分离下载：先下载视频，再下载音频 - 使用选择的格�?            const videoFormat = appState.videoFormat || 'mp4';
+            // 分离下载：先下载视频，再下载音频 - 使用选择的格式
+            const videoFormat = appState.videoFormat || 'mp4';
             const audioFormat = appState.audioFormat || 'mp3';
             showToast('开始分离下载，将依次下载视频和音频...', 'success');
             
@@ -2084,21 +2141,24 @@ async function downloadSelected() {
                 downloadFile(audioUrl_dl, `${safeTitle}_audio.${audioFormat}`);
             }, 1000);
         } else if (selectedFormat === 'audio') {
-            // 下载音频 - 使用选择的音频格�?            const audioFormat = appState.audioFormat || 'mp3';
+            // 下载音频 - 使用选择的音频格式
+            const audioFormat = appState.audioFormat || 'mp3';
             const downloadUrl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${qn}&type=audio`;
             downloadFile(downloadUrl, `${safeTitle}.${audioFormat}`);
         } else if (selectedFormat === 'video-only') {
-            // 下载视频（无音频�? 使用选择的视频格�?            const videoFormat = appState.videoFormat || 'mp4';
+            // 下载视频（无音频）- 使用选择的视频格式
+            const videoFormat = appState.videoFormat || 'mp4';
             const downloadUrl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${qn}&type=video`;
             downloadFile(downloadUrl, `${safeTitle}_video.${videoFormat}`);
         } else {
-            // 下载视频+音频合体（默认）- 使用选择的视频格�?            const videoFormat = appState.videoFormat || 'mp4';
+            // 下载视频+音频合体（默认）- 使用选择的视频格式
+            const videoFormat = appState.videoFormat || 'mp4';
             const downloadUrl = `${API_BASE_URL}/api/bilibili/download?url=${encodedUrl}&qn=${qn}&format=${videoFormat}`;
             downloadFile(downloadUrl, `${safeTitle}.${videoFormat}`);
         }
         
         // 显示提示
-        showToast('正在准备下载，请稍�?..', 'success');
+        showToast('正在准备下载，请稍候...', 'success');
         
     } catch (error) {
         showToast('下载失败: ' + error.message, 'error');
@@ -2111,22 +2171,25 @@ async function downloadSelected() {
 }
 
 // 下载文件辅助函数
-// downloadFile 保留为别名，兼容旧代�?function downloadFile(url, filename) {
+// downloadFile 保留为别名，兼容旧代码
+function downloadFile(url, filename) {
     triggerBrowserDownload(url, filename);
 }
 
-// 显示错误（兼容新 HTML�?function showError(message) {
+// 显示错误（兼容新 HTML）
+function showError(message) {
     const errorMessage = document.getElementById('errorMessage');
     if (errorMessage) errorMessage.textContent = message;
     if (errorSection) {
     errorSection.classList.remove('hidden');
     } else {
-        // �?HTML 没有 errorSection，使�?alert
+        // 新 HTML 没有 errorSection，使用 alert
         alert(message);
     }
 }
 
-// Toast 提示（兼容新 HTML�?function showToast(message, type = 'success') {
+// Toast 提示（兼容新 HTML）
+function showToast(message, type = 'success') {
     if (toast && toastMessage) {
     toast.className = `toast ${type === 'error' ? 'error' : ''}`;
     toastMessage.textContent = message;
@@ -2136,7 +2199,7 @@ async function downloadSelected() {
         toast.classList.add('hidden');
     }, 3000);
     } else {
-        // �?HTML 没有 toast，使用简单的提示
+        // 新 HTML 没有 toast，使用简单的提示
         console.log(`[${type}] ${message}`);
         // 可以在这里添加简单的提示实现
     }
@@ -2176,7 +2239,7 @@ async function saveAnnouncement() {
         
         const data = await response.json();
         if (data.success) {
-            showToast('公告已保�?, 'success');
+            showToast('公告已保存', 'success');
             loadAnnouncement();
             closeAdminModal();
         } else {
@@ -2198,11 +2261,11 @@ function showHelp() {
 }
 
 function showFAQ() {
-    showToast('常见问题：如遇下载失败，请尝试登录B站账�?, 'success');
+    showToast('常见问题：如遇下载失败，请尝试登录B站账号', 'success');
 }
 
 function showFeedback() {
-    showToast('反馈建议：请联系开发�?, 'success');
+    showToast('反馈建议：请联系开发者', 'success');
 }
 
 // 解析记录管理
@@ -2218,22 +2281,24 @@ function saveParseHistory(url, result) {
                 url: url,
                 title: result.title || '未知视频',
                 platform: result.platform || '未知平台',
-                author: result.author || '未知作�?,
+                author: result.author || '未知作者',
                 thumbnail: result.thumbnail || '',
                 timestamp: Date.now()
             };
         } else {
-            // 添加新记�?            history.unshift({
+            // 添加新记录
+            history.unshift({
                 url: url,
                 title: result.title || '未知视频',
                 platform: result.platform || '未知平台',
-                author: result.author || '未知作�?,
+                author: result.author || '未知作者',
                 thumbnail: result.thumbnail || '',
                 timestamp: Date.now()
             });
         }
         
-        // 限制最多保�?0条记�?        if (history.length > 50) {
+        // 限制最多保存50条记录
+        if (history.length > 50) {
             history = history.slice(0, 50);
         }
         
@@ -2303,7 +2368,7 @@ function deleteHistoryItem(index) {
         history.splice(index, 1);
         localStorage.setItem('parseHistory', JSON.stringify(history));
         loadParseHistory();
-        showToast('已删�?, 'success');
+        showToast('已删除', 'success');
     } catch (error) {
         console.error('删除解析记录失败:', error);
     }
@@ -2316,9 +2381,10 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// ==================== �?HTML 适配函数 ====================
+// ==================== 新 HTML 适配函数 ====================
 
-// 初始�?UI（新 HTML 使用�?function initUI() {
+// 初始化 UI（新 HTML 使用）
+function initUI() {
     if(appState.theme === 'dark') document.body.classList.add('dark-theme');
 
     // 延迟初始化，确保 DOM 完全加载
@@ -2365,17 +2431,20 @@ function escapeHtml(text) {
             }
         }
         
-        // 设置文件名格�?        const filenameFormatEl = document.getElementById('filenameFormat');
+        // 设置文件名格式
+        const filenameFormatEl = document.getElementById('filenameFormat');
         if (filenameFormatEl) filenameFormatEl.value = appState.filenameFormat;
     }, 100);
 }
 
-// 设置预设（新 HTML 使用�?function setPreset(type, val, btn) {
-    // 🔒 VIP画质权限检�?    if (type === 'quality') {
+// 设置预设（新 HTML 使用）
+function setPreset(type, val, btn) {
+    // 🔒 VIP画质权限检查
+    if (type === 'quality') {
         const needVip = val > 80; // 120(4K), 116(1080P60), 112(1080P+) 需要大会员
         if (needVip) {
             if (!isLoggedIn) {
-                showToast('请先登录B站账号才能选择此画�?, 'error');
+                showToast('请先登录B站账号才能选择此画质', 'error');
                 showLoginModal();
                 return; // 阻止选择
             }
@@ -2410,91 +2479,90 @@ function escapeHtml(text) {
         const vfRow = document.getElementById('videoFormatSegment');
         const afRow = document.getElementById('audioFormatSegment');
         
+        // 辅助函数：平滑显示/隐藏行
+        function showRow(row) {
+            if (!row) return;
+            // 先移除 hidden 类并设置 display，然后触发动画
+            row.classList.remove('hidden');
+            row.style.display = 'flex';
+            // 使用 requestAnimationFrame 确保 DOM 更新后再触发动画
+            requestAnimationFrame(() => {
+                row.style.maxHeight = '100px'; // 足够的高度
+                row.style.opacity = '1';
+                row.style.pointerEvents = 'auto';
+            });
+        }
+        
+        function hideRow(row) {
+            if (!row) return;
+            // 先触发淡出动画
+            row.style.maxHeight = '0';
+            row.style.opacity = '0';
+            row.style.pointerEvents = 'none';
+            // 等待动画完成后再隐藏
+            setTimeout(() => {
+                row.classList.add('hidden');
+                row.style.display = 'none';
+            }, 300); // 等待动画完成
+        }
+        
         if (val === 'cover') {
             // 封面：隐藏所有格式和画质选择
-            if (qRow) { qRow.style.display = 'none'; }
-            if (vfRow) { vfRow.style.display = 'none'; }
-            if (afRow) { afRow.style.display = 'none'; }
+            hideRow(qRow);
+            hideRow(vfRow);
+            hideRow(afRow);
         } else if (val === 'audio') {
             // 仅音频：显示音频格式，隐藏视频格式和画质
-            if (qRow) { qRow.style.display = 'none'; }
-            if (vfRow) { vfRow.style.display = 'none'; }
-            if (afRow) { 
-                afRow.style.display = 'flex';
-                setTimeout(() => {
-                    const activeAf = document.querySelector('#audioFormatSegment .segment-opt.active');
-                    if(activeAf) moveGlider(afRow, activeAf);
-                }, 10);
-            }
+            hideRow(qRow);
+            hideRow(vfRow);
+            showRow(afRow);
+            setTimeout(() => {
+                const activeAf = document.querySelector('#audioFormatSegment .segment-opt.active');
+                if(activeAf) moveGlider(afRow, activeAf);
+            }, 50);
         } else if (val === 'video-only') {
             // 纯画面：显示视频格式和画质，隐藏音频格式
-            if (qRow) { 
-                qRow.style.display = 'flex';
-                qRow.style.opacity = '1';
-                qRow.style.pointerEvents = 'auto';
-            }
-            if (vfRow) { 
-                vfRow.style.display = 'flex';
-                setTimeout(() => {
-                    const activeVf = document.querySelector('#videoFormatSegment .segment-opt.active');
-                    if(activeVf) moveGlider(vfRow, activeVf);
-                }, 10);
-            }
-            if (afRow) { afRow.style.display = 'none'; }
+            showRow(qRow);
+            showRow(vfRow);
+            hideRow(afRow);
             setTimeout(() => {
+                const activeVf = document.querySelector('#videoFormatSegment .segment-opt.active');
+                if(activeVf) moveGlider(vfRow, activeVf);
                 const activeQ = document.querySelector('#qualitySegment .segment-opt.active');
                 if(activeQ) moveGlider(qRow, activeQ);
-            }, 10);
+            }, 50);
         } else if (val === 'video+audio') {
-            // 视音合体：只显示视频格式和画质，不显示音频格�?            if (qRow) { 
-                qRow.style.display = 'flex';
-                qRow.style.opacity = '1';
-                qRow.style.pointerEvents = 'auto';
-            }
-            if (vfRow) { 
-                vfRow.style.display = 'flex';
-                setTimeout(() => {
-                    const activeVf = document.querySelector('#videoFormatSegment .segment-opt.active');
-                    if(activeVf) moveGlider(vfRow, activeVf);
-                }, 10);
-            }
-            if (afRow) { afRow.style.display = 'none'; }
+            // 视音合体：只显示视频格式和画质，不显示音频格式
+            showRow(qRow);
+            showRow(vfRow);
+            hideRow(afRow);
             setTimeout(() => {
+                const activeVf = document.querySelector('#videoFormatSegment .segment-opt.active');
+                if(activeVf) moveGlider(vfRow, activeVf);
                 const activeQ = document.querySelector('#qualitySegment .segment-opt.active');
                 if(activeQ) moveGlider(qRow, activeQ);
-            }, 10);
+            }, 50);
         } else if (val === 'video+audio-separate') {
             // 视音分离：显示所有相关选项
-            if (qRow) { 
-                qRow.style.display = 'flex';
-                qRow.style.opacity = '1';
-                qRow.style.pointerEvents = 'auto';
-            }
-            if (vfRow) { 
-                vfRow.style.display = 'flex';
-                setTimeout(() => {
-                    const activeVf = document.querySelector('#videoFormatSegment .segment-opt.active');
-                    if(activeVf) moveGlider(vfRow, activeVf);
-                }, 10);
-            }
-            if (afRow) { 
-                afRow.style.display = 'flex';
-                setTimeout(() => {
-                    const activeAf = document.querySelector('#audioFormatSegment .segment-opt.active');
-                    if(activeAf) moveGlider(afRow, activeAf);
-                }, 10);
-            }
+            showRow(qRow);
+            showRow(vfRow);
+            showRow(afRow);
             setTimeout(() => {
+                const activeVf = document.querySelector('#videoFormatSegment .segment-opt.active');
+                if(activeVf) moveGlider(vfRow, activeVf);
+                const activeAf = document.querySelector('#audioFormatSegment .segment-opt.active');
+                if(activeAf) moveGlider(afRow, activeAf);
                 const activeQ = document.querySelector('#qualitySegment .segment-opt.active');
                 if(activeQ) moveGlider(qRow, activeQ);
-            }, 10);
+            }, 50);
         }
     }
 
     if (currentData || currentVideoData) updateDownloadHint();
 }
 
-// 移动滑动指示器（�?HTML 使用�?function moveGlider(container, targetBtn) {
+// 移动滑动指示器（新 HTML 使用）
+function moveGlider(container, targetBtn) {
     const glider = container.querySelector('.glider');
     if (!glider || !targetBtn) return;
     
@@ -2503,16 +2571,24 @@ function escapeHtml(text) {
         const cRect = container.getBoundingClientRect();
         const bRect = targetBtn.getBoundingClientRect();
         const left = bRect.left - cRect.left + container.scrollLeft;
+        
+        // 先设置宽度，再设置位置，确保动画流畅
         glider.style.width = `${bRect.width}px`;
-        glider.style.transform = `translateX(${left}px)`;
-        glider.style.opacity = '0.15'; // 确保可见
+        
+        // 使用双重 requestAnimationFrame 确保宽度已应用
+        requestAnimationFrame(() => {
+            glider.style.transform = `translateX(${left}px)`;
+            glider.style.opacity = '0.15'; // 确保可见
+        });
     });
 }
 
-// 显示单视频结果（�?HTML 使用�?function showSingleResult(data) {
+// 显示单视频结果（新 HTML 使用）
+function showSingleResult(data) {
     currentData = data;
-    currentVideoData = data; // 兼容旧代�?    
-    // 保存搜索结果到localStorage（保持登�?退出后的状态）
+    currentVideoData = data; // 兼容旧代码
+    
+    // 保存搜索结果到localStorage（保持登录/退出后的状态）
     try {
         localStorage.setItem('lastParseResult', JSON.stringify(data));
         const currentUrl = videoUrlInput ? videoUrlInput.value.trim() : '';
@@ -2535,7 +2611,7 @@ function escapeHtml(text) {
     const coverPlayBtn = document.getElementById('coverPlayBtn');
     
     if (resTitle) resTitle.innerText = data.title || '未知标题';
-    if (resAuthor) resAuthor.innerHTML = `<i class="fas fa-user"></i> ${data.author || '未知UP�?}`;
+    if (resAuthor) resAuthor.innerHTML = `<i class="fas fa-user"></i> ${data.author || '未知UP主'}`;
     if (resDuration) resDuration.innerHTML = `<i class="far fa-clock"></i> ${data.duration || '00:00'}`;
     
     if (resCover && data.thumbnail) {
@@ -2553,7 +2629,8 @@ function escapeHtml(text) {
         coverPlayBtn.href = data.videoUrl;
     }
     
-    // 提取支持的画质列�?    if (data.downloadLinks && data.downloadLinks.length > 0) {
+    // 提取支持的画质列表
+    if (data.downloadLinks && data.downloadLinks.length > 0) {
         data.qualities = data.downloadLinks.map(link => link.qn).filter(qn => qn);
     } else {
         data.qualities = [80, 64, 32, 16]; // 默认画质
@@ -2586,7 +2663,8 @@ function restoreLastParseResult() {
     }
 }
 
-// 更新下载提示（新 HTML 使用�?function updateDownloadHint() {
+// 更新下载提示（新 HTML 使用）
+function updateDownloadHint() {
     const hintEl = document.getElementById('downloadHint');
     if (!hintEl) return;
     
@@ -2617,11 +2695,12 @@ function restoreLastParseResult() {
     } else {
         const maxQ = qualities.length > 0 ? Math.max(...qualities) : 80;
         const maxName = qNameMap[maxQ] || maxQ;
-        hintEl.innerHTML = `不支�?${targetName}，将自动降至 <span style="color:#F59E0B">${maxName}</span>`;
+        hintEl.innerHTML = `不支持 ${targetName}，将自动降至 <span style="color:#F59E0B">${maxName}</span>`;
     }
 }
 
-// 执行下载（新 HTML 使用�?async function executeDownload() {
+// 执行下载（新 HTML 使用）
+async function executeDownload() {
     const data = currentData || currentVideoData;
     if(!data) {
         alert('请先解析视频');
@@ -2653,13 +2732,16 @@ function restoreLastParseResult() {
                 triggerBrowserDownload(audioUrl_dl, `${safeTitle}_audio.${audioFormat}`);
             }, 1000);
         } else if (appState.format === 'audio') {
-            // 仅音频：使用选择的音频格�?            const downloadUrl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${qn}&type=audio&format=${audioFormat}`;
+            // 仅音频：使用选择的音频格式
+            const downloadUrl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${qn}&type=audio&format=${audioFormat}`;
             triggerBrowserDownload(downloadUrl, `${safeTitle}.${audioFormat}`);
         } else if (appState.format === 'video-only') {
-            // 纯画面：使用选择的视频格�?            const downloadUrl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${qn}&type=video&format=${videoFormat}`;
+            // 纯画面：使用选择的视频格式
+            const downloadUrl = `${API_BASE_URL}/api/bilibili/stream?url=${encodedUrl}&qn=${qn}&type=video&format=${videoFormat}`;
             triggerBrowserDownload(downloadUrl, `${safeTitle}_video.${videoFormat}`);
         } else {
-            // 视音合体：使用选择的视频格式（服务器合并后输出�?            const downloadUrl = `${API_BASE_URL}/api/bilibili/download?url=${encodedUrl}&qn=${qn}&format=${videoFormat}`;
+            // 视音合体：使用选择的视频格式（服务器合并后输出）
+            const downloadUrl = `${API_BASE_URL}/api/bilibili/download?url=${encodedUrl}&qn=${qn}&format=${videoFormat}`;
             triggerBrowserDownload(downloadUrl, `${safeTitle}.${videoFormat}`);
         }
     } catch (error) {
@@ -2667,7 +2749,8 @@ function restoreLastParseResult() {
     }
 }
 
-// 检查公告（�?HTML 使用�?async function checkAnnouncement(forceShow = false) {
+// 检查公告（新 HTML 使用）
+async function checkAnnouncement(forceShow = false) {
     if (!GIST_CONFIG.enabled && !forceShow) return;
 
     // Check if "Don't Show Today" is active
@@ -2695,7 +2778,7 @@ function restoreLastParseResult() {
             // 修复公告排版：移除重复的标题，只显示内容
             let message = json.message || '';
             // 如果消息包含 Markdown 标题，转换为 HTML
-            message = message.replace(/## 📢 最新更新\n\n/g, '<h4 style="color:var(--primary); margin-bottom:15px; font-size:1.1rem;">📢 最新更�?/h4>');
+            message = message.replace(/## 📢 最新更新\n\n/g, '<h4 style="color:var(--primary); margin-bottom:15px; font-size:1.1rem;">📢 最新更新</h4>');
             message = message.replace(/## 📜 更新历史\n\n/g, '<h4 style="color:var(--primary); margin-top:20px; margin-bottom:15px; font-size:1.1rem;">📜 更新历史</h4>');
             // 将换行转换为 <br>
             message = message.replace(/\n/g, '<br>');
@@ -2708,8 +2791,9 @@ function restoreLastParseResult() {
             if(json.isActive === false && !forceShow) return;
             versionId = json.id || content.length;
         } catch (e) {
-            // 如果不是 JSON，直接显示文本内�?            let textContent = escapeHtml(content);
-            textContent = textContent.replace(/## 📢 最新更新\n\n/g, '<h4 style="color:var(--primary); margin-bottom:15px; font-size:1.1rem;">📢 最新更�?/h4>');
+            // 如果不是 JSON，直接显示文本内容
+            let textContent = escapeHtml(content);
+            textContent = textContent.replace(/## 📢 最新更新\n\n/g, '<h4 style="color:var(--primary); margin-bottom:15px; font-size:1.1rem;">📢 最新更新</h4>');
             textContent = textContent.replace(/## 📜 更新历史\n\n/g, '<h4 style="color:var(--primary); margin-top:20px; margin-bottom:15px; font-size:1.1rem;">📜 更新历史</h4>');
             textContent = textContent.replace(/\n/g, '<br>');
             parsedContent = `<div style="white-space: pre-wrap; line-height:1.8; color:var(--text-main); font-size:0.95rem;">${textContent}</div>`;
@@ -2739,7 +2823,8 @@ function restoreLastParseResult() {
     }
 }
 
-// 关闭公告（新 HTML 使用�?function closeAnnouncement() {
+// 关闭公告（新 HTML 使用）
+function closeAnnouncement() {
     const checkbox = document.getElementById('dontShowTodayCheckbox');
     if (checkbox && checkbox.checked) {
         const today = new Date().toDateString();
@@ -2749,13 +2834,15 @@ function restoreLastParseResult() {
     if (announcementModal) announcementModal.classList.add('hidden');
 }
 
-// 切换历史记录下拉菜单（新 HTML 使用�?function toggleHistory(e) {
+// 切换历史记录下拉菜单（新 HTML 使用）
+function toggleHistory(e) {
     if (e) e.stopPropagation();
     const historyDropdown = document.getElementById('historyDropdown');
     if (historyDropdown) historyDropdown.classList.toggle('active');
 }
 
-// 保存历史记录（新 HTML 使用�?function saveHistory(url, title, author) {
+// 保存历史记录（新 HTML 使用）
+function saveHistory(url, title, author) {
     let history = JSON.parse(localStorage.getItem('parse_history') || '[]');
     history = history.filter(h => h.url !== url);
     history.unshift({ url, title, author, time: new Date().toLocaleDateString() });
@@ -2764,7 +2851,8 @@ function restoreLastParseResult() {
     loadHistoryToDropdown();
 }
 
-// 加载历史记录到下拉菜单（�?HTML 使用�?function loadHistoryToDropdown() {
+// 加载历史记录到下拉菜单（新 HTML 使用）
+function loadHistoryToDropdown() {
     const list = document.getElementById('historyDropdownList');
     if (!list) return;
     
@@ -2796,7 +2884,8 @@ function restoreLastParseResult() {
     });
 }
 
-// 删除历史记录项（�?HTML 使用�?function deleteHistoryItem(e, idx) {
+// 删除历史记录项（新 HTML 使用）
+function deleteHistoryItem(e, idx) {
     if (e) e.stopPropagation();
     let history = JSON.parse(localStorage.getItem('parse_history') || '[]');
     history.splice(idx, 1);
@@ -2804,12 +2893,14 @@ function restoreLastParseResult() {
     loadHistoryToDropdown();
 }
 
-// 清空历史记录（新 HTML 使用�?function clearHistory() {
+// 清空历史记录（新 HTML 使用）
+function clearHistory() {
     localStorage.removeItem('parse_history');
     loadHistoryToDropdown();
 }
 
-// 检查登录状态（�?HTML 使用�?function checkLogin() {
+// 检查登录状态（新 HTML 使用）
+function checkLogin() {
     checkLoginStatus().then(() => {
         if(isLoggedIn && userInfo) {
             const loginBtnArea = document.getElementById('loginBtnArea');
@@ -2830,13 +2921,14 @@ function restoreLastParseResult() {
             }
             if (headerName && userInfo.name) headerName.textContent = userInfo.name;
             
-            // 显示VIP状�?            if (headerVipBadge) {
+            // 显示VIP状态
+            if (headerVipBadge) {
                 headerVipBadge.classList.remove('hidden');
                 if (isVip) {
-                    headerVipBadge.textContent = '大会�?;
+                    headerVipBadge.textContent = '大会员';
                     headerVipBadge.classList.remove('normal');
                 } else {
-                    headerVipBadge.textContent = '普通用�?;
+                    headerVipBadge.textContent = '普通用户';
                     headerVipBadge.classList.add('normal');
                 }
             }
@@ -2851,11 +2943,12 @@ function restoreLastParseResult() {
     });
 }
 
-// 更新 handleSmartParse 以适配�?HTML（包装原函数�?const originalHandleSmartParse = handleSmartParse;
+// 更新 handleSmartParse 以适配新 HTML（包装原函数）
+const originalHandleSmartParse = handleSmartParse;
 handleSmartParse = async function() {
     const input = videoUrlInput ? videoUrlInput.value.trim() : '';
     if (!input) {
-        alert('请输入链�?);
+        alert('请输入链接');
         return;
     }
     
@@ -2868,7 +2961,7 @@ handleSmartParse = async function() {
     try {
         // 🔧 先检测收藏夹和UP主（优先级最高）
         const inputType = detectInputType(input);
-        console.log('输入类型检�?', inputType); // 调试日志
+        console.log('输入类型检测:', inputType); // 调试日志
         
         if (inputType.type === 'favorites') {
             await handleFavoritesParse(inputType.id);
@@ -2880,16 +2973,18 @@ handleSmartParse = async function() {
             return;
         }
         
-        // 🔧 再提取视频链�?        const urls = extractBilibiliUrls(input);
+        // 🔧 再提取视频链接
+        const urls = extractBilibiliUrls(input);
         console.log('提取到的视频链接:', urls); // 调试日志
         
         if (urls.length > 1) {
             // 批量解析
             await handleBatchParseNew(urls);
         } else if (urls.length === 1) {
-            // 单链接解�?            await handleSingleParse(urls[0]);
+            // 单链接解析
+            await handleSingleParse(urls[0]);
         } else {
-            throw new Error('无法识别输入内容，请检查是否为B站链接、收藏夹或UP主主�?);
+            throw new Error('无法识别输入内容，请检查是否为B站链接、收藏夹或UP主主页');
         }
     } catch (error) {
         if (errorSection) {
@@ -2904,9 +2999,10 @@ handleSmartParse = async function() {
     }
 };
 
-// 更新 handleBatchParse 以适配�?HTML（保留原函数，添加新版本�?async function handleBatchParseNew(urls) {
+// 更新 handleBatchParse 以适配新 HTML（保留原函数，添加新版本）
+async function handleBatchParseNew(urls) {
     if (!urls || urls.length === 0) {
-        alert('请输入至少一个有效链�?);
+        alert('请输入至少一个有效链接');
         return;
     }
     
@@ -2923,7 +3019,8 @@ handleSmartParse = async function() {
     let failedCount = 0;
     
     for (let i = 0; i < urls.length; i++) {
-        // 显示解析中状�?        if (batchListEl) {
+        // 显示解析中状态
+        if (batchListEl) {
             const item = document.createElement('div');
             item.className = 'batch-item';
             item.innerHTML = `
@@ -2952,7 +3049,8 @@ handleSmartParse = async function() {
                 });
                 successCount++;
                 
-                // 更新列表�?                if (batchListEl && batchListEl.children[i]) {
+                // 更新列表项
+                if (batchListEl && batchListEl.children[i]) {
                     const resultData = data.data;
                     let thumbnailUrl = resultData.thumbnail || '';
                     if (thumbnailUrl.startsWith('//')) thumbnailUrl = 'https:' + thumbnailUrl;
@@ -2979,7 +3077,8 @@ handleSmartParse = async function() {
                 });
                 failedCount++;
                 
-                // 更新列表项显示错�?                if (batchListEl && batchListEl.children[i]) {
+                // 更新列表项显示错误
+                if (batchListEl && batchListEl.children[i]) {
                     batchListEl.children[i].innerHTML = `
                         <div class="batch-info">
                             <div class="batch-title">${escapeHtml(urls[i])}</div>
@@ -2999,7 +3098,8 @@ handleSmartParse = async function() {
             });
             failedCount++;
             
-            // 更新列表项显示错�?            if (batchListEl && batchListEl.children[i]) {
+            // 更新列表项显示错误
+            if (batchListEl && batchListEl.children[i]) {
                 batchListEl.children[i].innerHTML = `
                     <div class="batch-info">
                         <div class="batch-title">${escapeHtml(urls[i])}</div>
@@ -3021,7 +3121,7 @@ handleSmartParse = async function() {
     if (batchCountEl) batchCountEl.textContent = batchResults.length;
 }
 
-// 更新 downloadAllBatch 以适配�?HTML
+// 更新 downloadAllBatch 以适配新 HTML
 const originalDownloadAllBatch = downloadAllBatch;
 downloadAllBatch = function() {
     const progSec = document.getElementById('progressSection');
@@ -3074,7 +3174,7 @@ downloadAllBatch = function() {
                 if (num) num.innerText = `${current}/${total}`;
                 
                 if (current >= total) {
-                    if (status) status.innerText = "下载完成�?;
+                    if (status) status.innerText = "下载完成！";
                     setTimeout(() => {
                         if (progSec) progSec.classList.add('hidden');
                     }, 3000);
@@ -3082,39 +3182,46 @@ downloadAllBatch = function() {
             } catch (error) {
                 console.error('下载失败:', error);
             }
-        }, index * 2000); // 每个下载间隔2�?    });
+        }, index * 2000); // 每个下载间隔2秒
+    });
 };
 
-// 清空批量结果（新 HTML 使用�?function clearBatch() {
+// 清空批量结果（新 HTML 使用）
+function clearBatch() {
     if (batchSection) batchSection.classList.add('hidden');
     batchResults = [];
     if (batchList) batchList.innerHTML = '';
     if (batchCount) batchCount.textContent = '0';
 }
 
-// ==================== 背景图系�?(二次元美少女) ====================
+// ==================== 背景图系统 (二次元美少女) ====================
 
-// 背景图配�?- 二次元美少女图片（支持本地图片）
+// 背景图配置 - 二次元美少女图片（支持本地图片）
 const bgConfig = {
-    // 统一背景图池（不区分白天黑夜�?分钟自动切换�?    images: [
-        // 本地图片（推荐）：把喜欢的图放在 public/images/ �?        // 取消注释并添加你的本地图片路径：
+    // 统一背景图池（不区分白天黑夜，3分钟自动切换）
+    images: [
+        // 本地图片（推荐）：把喜欢的图放在 public/images/ 下
+        // 取消注释并添加你的本地图片路径：
         // 'images/bg1.jpg',
         // 'images/bg2.jpg',
         // 'images/bg3.jpg',
         // 在线API（备用）
         'https://api.ixiaowai.cn/gqapi/gqapi.php', // 风景/二次元API
-        'https://img.paulzzh.com/touhou/random', // 东方Project随机�?(质量�?
+        'https://img.paulzzh.com/touhou/random', // 东方Project随机图 (质量高)
         'https://www.dmoe.cc/random.php', // 随机二次元美少女
-        'https://api.ixiaowai.cn/api/api.php', // 综合随机二次�?    ],
-    // 轮换间隔（毫秒）�?分钟 = 180000ms
+        'https://api.ixiaowai.cn/api/api.php', // 综合随机二次元
+    ],
+    // 轮换间隔（毫秒）：3分钟 = 180000ms
     rotateInterval: 180000,
-    // 当前使用的图片索�?    currentIndex: 0
+    // 当前使用的图片索引
+    currentIndex: 0
 };
 
 // 背景图轮换定时器
 let bgRotateTimer = null;
 
-// 更新背景图逻辑（不随主题切换，3分钟自动轮换�?function updateBackgroundImage() {
+// 更新背景图逻辑（不随主题切换，3分钟自动轮换）
+function updateBackgroundImage() {
     const bgElement = document.getElementById('backgroundImage');
     if (!bgElement || !bgConfig.images || bgConfig.images.length === 0) return;
 
@@ -3126,25 +3233,31 @@ let bgRotateTimer = null;
         url += (url.includes('?') ? '&' : '?') + 't=' + new Date().getTime();
     }
 
-    // 图片预加�?    const img = new Image();
+    // 图片预加载
+    const img = new Image();
     img.src = url;
     
     img.onload = () => {
         // 直接设置背景图，让CSS控制透明度和滤镜
         bgElement.style.backgroundImage = `url('${url}')`;
-        // 清除内联样式，让CSS类控制效�?        bgElement.style.opacity = '';
+        // 清除内联样式，让CSS类控制效果
+        bgElement.style.opacity = '';
         bgElement.style.filter = '';
         
-        // 更新索引，下次使用下一�?        bgConfig.currentIndex = (bgConfig.currentIndex + 1) % bgConfig.images.length;
+        // 更新索引，下次使用下一张
+        bgConfig.currentIndex = (bgConfig.currentIndex + 1) % bgConfig.images.length;
     };
 
     img.onerror = () => {
-        console.warn('背景图加载失败，跳过到下一�?);
-        // 加载失败时跳过到下一�?        bgConfig.currentIndex = (bgConfig.currentIndex + 1) % bgConfig.images.length;
-        // 如果还有图片，尝试加载下一�?        if (bgConfig.images.length > 0) {
+        console.warn('背景图加载失败，跳过到下一张');
+        // 加载失败时跳过到下一张
+        bgConfig.currentIndex = (bgConfig.currentIndex + 1) % bgConfig.images.length;
+        // 如果还有图片，尝试加载下一张
+        if (bgConfig.images.length > 0) {
             setTimeout(() => updateBackgroundImage(), 1000);
         } else {
-            // 没有可用图片时使用渐�?            const isDark = document.body.classList.contains('dark-theme');
+            // 没有可用图片时使用渐变
+            const isDark = document.body.classList.contains('dark-theme');
             if(isDark) {
                 bgElement.style.backgroundImage = 'linear-gradient(135deg, #2d1934 0%, #231428 50%, #321937 100%)';
             } else {
@@ -3154,7 +3267,8 @@ let bgRotateTimer = null;
     };
 }
 
-// 切换主题（新 HTML 使用�?function toggleTheme() {
+// 切换主题（新 HTML 使用）
+function toggleTheme() {
     if (!appState) {
         appState = {
             format: localStorage.getItem('preset_format') || 'video+audio',
@@ -3197,7 +3311,8 @@ function initBackgroundImage() {
         return;
     }
     
-    // 恢复上次的图片索引（从localStorage�?    const savedIndex = localStorage.getItem('bg_currentIndex');
+    // 恢复上次的图片索引（从localStorage）
+    const savedIndex = localStorage.getItem('bg_currentIndex');
     if (savedIndex !== null) {
         bgConfig.currentIndex = parseInt(savedIndex) || 0;
     }
@@ -3208,16 +3323,17 @@ function initBackgroundImage() {
     // 启动背景图轮换定时器（每3分钟换一张）
     startBackgroundRotation();
     
-    console.log('背景图已初始化，�?分钟自动轮换，不随主题切�?);
+    console.log('背景图已初始化，每3分钟自动轮换，不随主题切换');
 }
 
-// 启动背景图轮�?function startBackgroundRotation() {
+// 启动背景图轮换
+function startBackgroundRotation() {
     // 清除旧定时器
     if (bgRotateTimer) {
         clearInterval(bgRotateTimer);
     }
     
-    // �?分钟轮换一次背景图（不随主题切换）
+    // 每3分钟轮换一次背景图（不随主题切换）
     bgRotateTimer = setInterval(() => {
         console.log('背景图轮换中...');
         updateBackgroundImage();
@@ -3226,14 +3342,15 @@ function initBackgroundImage() {
     }, bgConfig.rotateInterval);
 }
 
-// 停止背景图轮�?function stopBackgroundRotation() {
+// 停止背景图轮换
+function stopBackgroundRotation() {
     if (bgRotateTimer) {
         clearInterval(bgRotateTimer);
         bgRotateTimer = null;
     }
 }
 
-// 更新 saveSettings 以适配�?HTML
+// 更新 saveSettings 以适配新 HTML
 const originalSaveSettings = saveSettings;
 saveSettings = function() {
     const filenameFormatEl = document.getElementById('filenameFormat');
@@ -3243,7 +3360,7 @@ saveSettings = function() {
     }
 };
 
-// 更新 handleSingleParse 以适配�?HTML
+// 更新 handleSingleParse 以适配新 HTML
 const originalHandleSingleParse = handleSingleParse;
 handleSingleParse = async function(url) {
     if (loadingSection) loadingSection.classList.remove('hidden');
@@ -3263,7 +3380,7 @@ handleSingleParse = async function(url) {
 
         if (data.success) {
             currentVideoData = data.data;
-            currentData = data.data; // �?HTML 使用
+            currentData = data.data; // 新 HTML 使用
             
             // 保存历史记录
             saveHistory(url, data.data.title, data.data.author);
@@ -3320,9 +3437,11 @@ window.selectPresetQuality = selectPresetQuality;
 window.selectPresetOutput = selectPresetOutput;
 // 设置
 window.toggleSettings = toggleSettings;
-window.toggleTheme = toggleTheme; // �?HTML 使用 toggleTheme
-window.setTheme = toggleTheme; // 兼容旧代�?window.saveSettings = saveSettings;
-// �?HTML 使用的函�?window.setPreset = setPreset;
+window.toggleTheme = toggleTheme; // 新 HTML 使用 toggleTheme
+window.setTheme = toggleTheme; // 兼容旧代码
+window.saveSettings = saveSettings;
+// 新 HTML 使用的函数
+window.setPreset = setPreset;
 window.moveGlider = moveGlider;
 window.showSingleResult = showSingleResult;
 window.executeDownload = executeDownload;
