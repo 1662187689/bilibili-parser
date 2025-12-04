@@ -2764,6 +2764,7 @@ async function checkAnnouncement(forceShow = false) {
         const response = await fetch(rawUrl);
         if (!response.ok) throw new Error('Network error');
         
+        // 确保使用 UTF-8 编码读取内容
         const content = await response.text();
         let parsedContent;
         let shouldShow = forceShow;
