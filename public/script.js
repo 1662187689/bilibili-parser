@@ -358,15 +358,44 @@ async function downloadWithPreset() {
 
 // 触发浏览器下载
 function triggerBrowserDownload(url, filename) {
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.style.display = 'none';
-    document.body.appendChild(link);
-    link.click();
-    setTimeout(() => {
-        document.body.removeChild(link);
+    try {
+        console.log('开始下载:', url, filename);
+        
+        // 检查 URL 是否有效
+        if (!url || url === 'undefined' || url === 'null') {
+            console.error('无效的下载 URL:', url);
+            showToast('下载失败：无效的链接', 'error');
+            return;
+        }
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.style.display = 'none';
+        link.target = '_blank'; // 在新窗口打开，避免某些浏览器阻止
+        
+        // 添加错误处理
+        link.onerror = () => {
+            console.error('下载链接错误:', url);
+            showToast('下载失败，请重试', 'error');
+        };
+        
+        document.body.appendChild(link);
+        link.click();
+        
+        setTimeout(() => {
+            try {
+                document.body.removeChild(link);
+            } catch (e) {
+                console.warn('移除下载链接失败:', e);
+            }
         }, 100);
+        
+        console.log('下载链接已触发');
+    } catch (error) {
+        console.error('触发下载失败:', error);
+        showToast('下载失败: ' + error.message, 'error');
+    }
 }
 
 // ==================== 设置功能 ====================
