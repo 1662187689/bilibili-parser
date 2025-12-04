@@ -53,3 +53,14 @@ test/
 *config.local*
 *secrets*
 
+# 文档文件（只保留 README.md）
+*.md
+!README.md
+
+# 批处理文件和脚本（本地使用，不提交）
+*.bat
+更新GitHub用户名.bat
+清理Git历史.bat
+推送到GitHub.bat
+推送命令.txt
+

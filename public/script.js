@@ -3,7 +3,7 @@ const API_BASE_URL = window.location.origin;
 
 // GitHub Gist 公告配置
 const GIST_CONFIG = {
-    username: '1662187689',
+    username: 'YiQing-House',
     gistId: 'ae97ddcecaaf2f3dea622ef7b2520c67',
     filename: 'gistfile1.txt',
     enabled: true

@@ -9,7 +9,7 @@ const { execSync } = require('child_process');
 
 // Gist 配置（与前端保持一致）
 const GIST_CONFIG = {
-    username: '1662187689',
+    username: 'YiQing-House',
     gistId: 'ae97ddcecaaf2f3dea622ef7b2520c67',
     filename: 'gistfile1.txt',
     // 需要 GitHub Personal Access Token（有 gist 权限）
