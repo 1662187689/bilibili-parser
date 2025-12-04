@@ -536,34 +536,34 @@ app.post('/api/parse', async (req, res) => {
             });
         }
 
-        // 获取用户登录信息（如果是B站视频）
+        // 获取用户登录信息（如果是视频）
         let cookies = null;
         const sessionId = req.cookies?.bili_session;
         if (sessionId && loginSessions.has(sessionId)) {
             cookies = loginSessions.get(sessionId).cookies;
         }
 
-        // 解析视频（优先使用多平台服务）
+        // 处理视频（优先使用多平台服务）
         let result;
         if (url.includes('bilibili.com') || url.includes('b23.tv')) {
-            // B站视频，使用专门的B站服务（支持登录）
+            // 视频，使用专门的服务（支持登录）
             if (cookies) {
                 result = await bilibiliService.parseVideo(url, cookies);
             } else {
                 result = await bilibiliService.parseVideo(url);
             }
-            result.platform = 'B站';
+            result.platform = '视频';
         } else {
-            // 其他平台，使用多平台解析服务（优先yt-dlp，备用API）
+            // 其他平台，使用多平台处理服务（优先yt-dlp，备用API）
             try {
                 result = await multiPlatformService.parseVideo(url);
             } catch (multiError) {
                 // 如果多平台服务失败，尝试使用旧的videoParser作为备用
-                console.log('多平台服务失败，尝试备用解析器:', multiError.message);
+                console.log('多平台服务失败，尝试备用处理器:', multiError.message);
                 try {
                     result = await videoParser.parse(url);
                 } catch (backupError) {
-                    throw new Error(`视频解析失败: ${multiError.message}`);
+                    throw new Error(`视频处理失败: ${multiError.message}`);
                 }
             }
         }
@@ -574,10 +574,10 @@ app.post('/api/parse', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('解析错误:', error);
+        console.error('处理错误:', error);
         res.status(500).json({
             success: false,
-            error: error.message || '解析失败，请稍后重试'
+                error: error.message || '处理失败，请稍后重试'
         });
     }
 });
@@ -681,17 +681,17 @@ app.get('/api/ytdlp/download', async (req, res) => {
 
         console.log('使用 yt-dlp 下载视频:', url, '格式:', format);
 
-        // 检测是否是 B站链接
+        // 检测是否是视频链接
         const isBilibili = url.includes('bilibili.com') || url.includes('b23.tv');
         
         if (isBilibili) {
-            // B站视频使用专用下载方法
-            console.log('检测到 B站链接，使用专用下载方法...');
+            // 视频使用专用下载方法
+            console.log('检测到视频链接，使用专用下载方法...');
             try {
                 await bilibiliService.downloadAndMerge(url, res);
                 return;
             } catch (biliError) {
-                console.error('B站专用下载失败:', biliError.message);
+                console.error('专用下载失败:', biliError.message);
                 console.log('尝试使用 yt-dlp 作为备用...');
             }
         }

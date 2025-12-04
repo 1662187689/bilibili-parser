@@ -1230,7 +1230,7 @@ async function handleFavoritesParse(favId) {
                     author: video.author,
                     thumbnail: video.thumbnail,
                     duration: video.duration,
-                    platform: 'B站',
+                    platform: '视频',
                     bvid: video.bvid
                 }
             }));
@@ -1271,7 +1271,7 @@ async function handleFavoritesParse(favId) {
             
             showToast(`成功处理 ${data.videos.length} 个视频`, 'success');
         } else {
-            throw new Error(data.error || '解析收藏夹失败');
+            throw new Error(data.error || '处理收藏夹失败');
         }
         
     } catch (error) {
@@ -1321,7 +1321,7 @@ async function handleUserVideosParse(uid) {
                     author: video.author,
                     thumbnail: video.thumbnail,
                     duration: video.duration,
-                    platform: 'B站',
+                    platform: '视频',
                     bvid: video.bvid
                 }
             }));
@@ -1751,7 +1751,7 @@ function startQRCodeCheck(qrcodeKey) {
                         
                         showToast('登录成功！', 'success');
                         
-                        // 不再刷新页面，保持解析搜索结果
+                        // 不再刷新页面，保持处理搜索结果
                         break;
                     case 'expired':
                         clearInterval(qrCheckInterval);
@@ -1790,15 +1790,15 @@ async function logout() {
     
     showToast('已退出登录', 'success');
     
-    // 不再刷新页面，保持解析搜索结果
+    // 不再刷新页面，保持处理搜索结果
 }
 
-// 解析视频 (保留为兼容方法，实际使用 handleSmartParse)
+// 处理视频 (保留为兼容方法，实际使用 handleSmartParse)
 async function handleParse() {
     return handleSmartParse();
 }
 
-// 显示解析结果
+// 显示处理结果
 async function displayResult(result) {
     // 重新检查登录状态（确保状态是最新的）
     await checkLoginStatus();
@@ -1817,13 +1817,13 @@ async function displayResult(result) {
     const coverPlayBtn = document.getElementById('coverPlayBtn');
     
     if (result.thumbnail) {
-        // 处理 B站封面的协议问题
+        // 处理视频封面的协议问题
         let thumbnailUrl = result.thumbnail;
         if (thumbnailUrl.startsWith('//')) {
             thumbnailUrl = 'https:' + thumbnailUrl;
         }
         
-        // 使用代理加载B站封面（解决防盗链问题）
+        // 使用代理加载视频封面（解决防盗链问题）
         if (thumbnailUrl.includes('bilibili.com') || thumbnailUrl.includes('hdslb.com')) {
             thumbnailUrl = `${API_BASE_URL}/api/proxy/image?url=${encodeURIComponent(thumbnailUrl)}`;
         }
@@ -1854,14 +1854,14 @@ async function displayResult(result) {
     resultSection.classList.remove('hidden');
     resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
     
-    // 保存解析记录
+    // 保存处理记录
     saveParseHistory(videoUrlInput.value.trim(), result);
     
     // 更新历史记录显示
     loadParseHistory();
 }
 
-// 生成画质列表（显示所有画质，与B站播放器一致）
+// 生成画质列表（显示所有画质）
 function generateQualityList(result) {
     const qualityList = document.getElementById('qualityList');
     qualityList.innerHTML = '';
@@ -2283,18 +2283,18 @@ async function clearAnnouncement() {
 
 // 帮助页面
 function showHelp() {
-    showToast('使用说明：粘贴视频链接，点击解析即可下载', 'success');
+    showToast('使用说明：粘贴视频链接，点击去水印即可下载', 'success');
 }
 
 function showFAQ() {
-    showToast('常见问题：如遇下载失败，请尝试登录B站账号', 'success');
+    showToast('常见问题：如遇下载失败，请尝试登录网站账号', 'success');
 }
 
 function showFeedback() {
     showToast('反馈建议：请联系开发者', 'success');
 }
 
-// 解析记录管理
+// 处理记录管理
 function saveParseHistory(url, result) {
     try {
         let history = JSON.parse(localStorage.getItem('parseHistory') || '[]');
@@ -2330,7 +2330,7 @@ function saveParseHistory(url, result) {
         
         localStorage.setItem('parseHistory', JSON.stringify(history));
     } catch (error) {
-        console.error('保存解析记录失败:', error);
+        console.error('保存处理记录失败:', error);
     }
 }
 
@@ -2340,7 +2340,7 @@ function loadParseHistory() {
         const historyList = document.getElementById('historyList');
         
         if (history.length === 0) {
-            historyList.innerHTML = '<div class="history-empty">暂无解析记录</div>';
+            historyList.innerHTML = '<div class="history-empty">暂无处理记录</div>';
             return;
         }
         
@@ -2367,7 +2367,7 @@ function loadParseHistory() {
                     </div>
                 </div>
                 <div class="history-actions">
-                    <button class="history-action-btn" onclick="parseFromHistory('${item.url.replace(/'/g, "\\'")}')" title="重新解析">
+                    <button class="history-action-btn" onclick="parseFromHistory('${item.url.replace(/'/g, "\\'")}')" title="重新处理">
                         <i class="fas fa-redo"></i>
                     </button>
                     <button class="history-action-btn" onclick="deleteHistoryItem(${index})" title="删除">
@@ -2379,7 +2379,7 @@ function loadParseHistory() {
             historyList.appendChild(historyItem);
         });
     } catch (error) {
-        console.error('加载解析记录失败:', error);
+        console.error('加载处理记录失败:', error);
     }
 }
 
@@ -2396,7 +2396,7 @@ function deleteHistoryItem(index) {
         loadParseHistory();
         showToast('已删除', 'success');
     } catch (error) {
-        console.error('删除解析记录失败:', error);
+        console.error('删除处理记录失败:', error);
     }
 }
 
@@ -2447,7 +2447,7 @@ function setPreset(type, val, btn) {
         // 1080P(80)及以下是免费画质，任何人都可选择
         if (needVip) {
             if (!isLoggedIn) {
-                showToast('此画质需要登录B站账号', 'error');
+                showToast('此画质需要登录网站账号', 'error');
                 showLoginModal();
                 return; // 阻止选择
             }
@@ -2564,7 +2564,7 @@ function showSingleResult(data) {
             localStorage.setItem('lastParseUrl', currentUrl);
         }
     } catch (e) {
-        console.warn('保存解析结果失败:', e);
+        console.warn('保存处理结果失败:', e);
     }
     
     const resultSection = document.getElementById('resultSection');
@@ -2631,7 +2631,7 @@ function resetQualityButtons() {
     });
 }
 
-// 恢复上次的解析搜索结果（保持登录/退出后的状态）
+// 恢复上次的处理搜索结果（保持登录/退出后的状态）
 function restoreLastParseResult() {
     try {
         const savedResult = localStorage.getItem('lastParseResult');
@@ -2648,10 +2648,10 @@ function restoreLastParseResult() {
             // 恢复搜索结果显示
             showSingleResult(data);
             
-            console.log('已恢复上次的解析搜索结果');
+            console.log('已恢复上次的处理搜索结果');
         }
     } catch (e) {
-        console.warn('恢复解析结果失败:', e);
+        console.warn('恢复处理结果失败:', e);
     }
 }
 
@@ -2911,7 +2911,7 @@ function clearHistory() {
     loadHistoryToDropdown();
 }
 
-// 清空所有（输入框 + 解析结果）
+// 清空所有（输入框 + 处理结果）
 function clearAll() {
     // 清空输入框
     const videoUrlInput = document.getElementById('videoUrl');
@@ -2942,7 +2942,7 @@ function clearAll() {
     currentVideoData = null;
     batchResults = [];
     
-    // 清除localStorage中保存的解析结果
+    // 清除localStorage中保存的处理结果
     localStorage.removeItem('lastParseResult');
     localStorage.removeItem('lastParseUrl');
 }
@@ -3029,10 +3029,10 @@ handleSmartParse = async function() {
             // 批量处理
             await handleBatchParseNew(urls);
         } else if (urls.length === 1) {
-            // 单链接解析
+            // 单链接处理
             await handleSingleParse(urls[0]);
         } else {
-            throw new Error('无法识别输入内容，请检查是否为B站链接、收藏夹或UP主主页');
+            throw new Error('无法识别输入内容，请检查是否为视频链接、收藏夹或用户主页');
         }
     } catch (error) {
         if (errorSection) {
@@ -3067,7 +3067,7 @@ async function handleBatchParseNew(urls) {
     let failedCount = 0;
     
     for (let i = 0; i < urls.length; i++) {
-        // 显示解析中状态
+        // 显示处理中状态
         if (batchListEl) {
             const item = document.createElement('div');
             item.className = 'batch-item';
@@ -3469,7 +3469,7 @@ window.clearAnnouncement = clearAnnouncement;
 window.showHelp = showHelp;
 window.showFAQ = showFAQ;
 window.showFeedback = showFeedback;
-// 智能解析
+// 智能处理
 window.handleSmartParse = handleSmartParse;
 window.downloadBatchItem = downloadBatchItem;
 window.retryBatchItem = retryBatchItem;
@@ -3921,7 +3921,7 @@ async function searchMusicFromAPI(keyword) {
         
         if (response.ok) {
             const data = await response.json();
-            // 根据实际API返回格式解析
+            // 根据实际API返回格式处理
             if (data.data && Array.isArray(data.data)) {
                 return data.data.map(item => ({
                     title: item.name || item.title || keyword,
