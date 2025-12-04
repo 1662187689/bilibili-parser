@@ -1,0 +1,42 @@
+# 依赖（会在部署时自动安装）
+node_modules/
+
+# 开发文件
+.git/
+.gitignore
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 文档
+*.md
+!README.md
+
+# 测试文件
+test/
+*.test.js
+
+# 本地配置文件
+.env
+.env.local
+*.local
+
+# 批处理文件
+*.bat
+
+# 临时文件
+temp/
+tmp/
+downloads/
+*.log
+
+# 数据文件（Serverless 使用临时存储）
+data/
+
+# 大文件
+cursor_.md
+
+# 部署相关（避免循环）
+serverless.yml.example
+

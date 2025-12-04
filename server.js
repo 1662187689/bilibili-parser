@@ -980,12 +980,17 @@ function isValidUrl(string) {
     }
 }
 
-// 启动服务器
-app.listen(PORT, () => {
-    console.log(`🚀 服务器运行在 http://localhost:${PORT}`);
-    console.log(`📱 API 端点: http://localhost:${PORT}/api/parse`);
-    console.log(`🔐 管理员密钥: ${ADMIN_KEY}`);
-});
+// 导出 app（用于 Serverless 部署）
+module.exports = app;
+
+// 如果不是作为模块导入，则启动服务器
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log(`🚀 服务器运行在 http://localhost:${PORT}`);
+        console.log(`📱 API 端点: http://localhost:${PORT}/api/parse`);
+        console.log(`🔐 管理员密钥: ${ADMIN_KEY}`);
+    });
+}
 
 // 错误处理
 process.on('unhandledRejection', (err) => {

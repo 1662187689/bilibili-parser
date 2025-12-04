@@ -27,81 +27,58 @@ npm install -g serverless
 ```bash
 serverless login
 ```
+首次登录会打开浏览器，使用腾讯云账号扫码登录。
 
-**步骤3：创建 serverless.yml 配置文件**
-在项目根目录创建 `serverless.yml`：
+**步骤3：配置文件已就绪**
+项目已包含以下文件：
+- ✅ `serverless.yml` - Serverless 配置文件
+- ✅ `index.js` - Serverless 入口文件
+- ✅ `.serverlessignore` - 排除不需要上传的文件
 
-```yaml
-component: scf
-name: yiqingbili
-inputs:
-  name: yiqingbili
-  runtime: Nodejs16.13
-  region: ap-guangzhou
-  handler: index.handler
-  memorySize: 512
-  timeout: 60
-  environment:
-    variables:
-      NODE_ENV: production
-  events:
-    - apigw:
-        parameters:
-          protocols:
-            - https
-            - http
-          serviceName: yiqingbili-api
-          description: YiQingBili API Gateway
-          environment: release
-          endpoints:
-            - path: /
-              method: ANY
-            - path: /{proxy+}
-              method: ANY
+**步骤4：安装依赖**
+确保项目依赖已安装：
+```bash
+npm install
 ```
 
-**步骤4：创建入口文件**
-创建 `index.js`（用于 Serverless）：
-
-```javascript
-const express = require('express');
-const app = require('./server');
-
-// Serverless 入口
-exports.handler = async (event, context) => {
-    // 将 API Gateway 事件转换为 Express 请求
-    const { httpMethod, path, headers, queryStringParameters, body } = event;
-    
-    return new Promise((resolve) => {
-        const req = {
-            method: httpMethod,
-            url: path,
-            headers: headers || {},
-            query: queryStringParameters || {},
-            body: body ? JSON.parse(body) : {}
-        };
-        
-        const res = {
-            statusCode: 200,
-            headers: {},
-            body: '',
-            setHeader: (key, value) => { res.headers[key] = value; },
-            status: (code) => { res.statusCode = code; return res; },
-            json: (data) => { res.body = JSON.stringify(data); resolve(res); },
-            send: (data) => { res.body = data; resolve(res); }
-        };
-        
-        app(req, res, () => {
-            resolve(res);
-        });
-    });
-};
-```
-
-**步骤5：部署**
+**步骤5：部署到腾讯云**
 ```bash
 serverless deploy
 ```
+
+部署过程会：
+1. 打包项目文件
+2. 上传到腾讯云
+3. 创建云函数
+4. 创建 API Gateway
+5. 返回访问地址
+
+**部署成功后会显示：**
+```
+serverless ⚡ framework
+Action: "deploy" - Stage: "dev" - App: "yiqingbili" - Instance: "yiqingbili"
+
+region:    ap-guangzhou
+function:  yiqingbili
+runtime:   Nodejs16.13
+handler:   index.handler
+memorySize: 512
+timeout:   300
+
+Full details: https://console.cloud.tencent.com/scf/index?rid=1&ns=default&id=yiqingbili
+
+endpoints:
+  ANY - https://service-xxx-xxx.gz.apigw.tencentcs.com/
+  ANY - https://service-xxx-xxx.gz.apigw.tencentcs.com/{proxy+}
+
+functions:
+  yiqingbili: yiqingbili-dev-yiqingbili
+
+3s › yiqingbili › Success
+```
+
+**步骤6：测试部署**
+访问返回的 API Gateway 地址，应该能看到网站首页。
 
 **步骤6：绑定域名**
 1. 登录 [腾讯云 API Gateway 控制台](https://console.cloud.tencent.com/apigateway)
