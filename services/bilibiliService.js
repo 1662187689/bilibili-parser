@@ -987,22 +987,39 @@ class BilibiliService {
     }
 
     /**
-     * 流式转换并下载
+     * 流式转换并下载（带超时和错误处理）
      */
     async streamWithFormat(url, res, filename, type, format) {
+        const timestamp = Date.now();
+        const tempFile = path.join(this.downloadDir, `${timestamp}_temp.${type === 'audio' ? 'm4a' : 'm4s'}`);
+        const outputFile = path.join(this.downloadDir, `${timestamp}_output.${format}`);
+        
         try {
-            const timestamp = Date.now();
-            const tempFile = path.join(this.downloadDir, `${timestamp}_temp.${type === 'audio' ? 'm4a' : 'm4s'}`);
-            const outputFile = path.join(this.downloadDir, `${timestamp}_output.${format}`);
+            console.log(`开始下载并转换 ${type} 为 ${format} 格式...`);
             
-            // 先下载到临时文件
-            await this.downloadFile(url, tempFile);
+            // 先下载到临时文件（设置超时）
+            const downloadPromise = this.downloadFile(url, tempFile);
+            const downloadTimeout = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('下载超时')), 60000) // 60秒超时
+            );
+            await Promise.race([downloadPromise, downloadTimeout]);
             
-            // 转换格式
-            if (type === 'audio') {
-                await this.convertAudioFormat(tempFile, outputFile, format);
-            } else {
-                await this.convertVideoFormat(tempFile, outputFile, format);
+            console.log(`下载完成，开始转换格式...`);
+            
+            // 转换格式（设置超时）
+            const convertPromise = type === 'audio' 
+                ? this.convertAudioFormat(tempFile, outputFile, format)
+                : this.convertVideoFormat(tempFile, outputFile, format);
+            const convertTimeout = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('格式转换超时')), 300000) // 5分钟超时
+            );
+            await Promise.race([convertPromise, convertTimeout]);
+            
+            console.log(`格式转换完成，开始发送文件...`);
+            
+            // 检查输出文件是否存在
+            if (!fs.existsSync(outputFile)) {
+                throw new Error('转换后的文件不存在');
             }
             
             // 发送转换后的文件
@@ -1017,11 +1034,40 @@ class BilibiliService {
             
             fileStream.on('end', () => {
                 setTimeout(() => {
-                    try { fs.unlinkSync(tempFile); fs.unlinkSync(outputFile); } catch (e) {}
+                    try { 
+                        if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+                        if (fs.existsSync(outputFile)) fs.unlinkSync(outputFile);
+                    } catch (e) {
+                        console.error('清理临时文件失败:', e.message);
+                    }
                 }, 5000);
             });
+            
+            fileStream.on('error', (err) => {
+                console.error('发送文件流错误:', err.message);
+                if (!res.headersSent) {
+                    res.status(500).json({ success: false, error: '发送文件失败' });
+                }
+            });
+            
         } catch (error) {
-            throw new Error(`流式转换失败: ${error.message}`);
+            console.error(`格式转换失败: ${error.message}`);
+            
+            // 清理临时文件
+            try {
+                if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+                if (fs.existsSync(outputFile)) fs.unlinkSync(outputFile);
+            } catch (e) {}
+            
+            // 如果转换失败，回退到直接代理原始文件
+            if (!res.headersSent) {
+                console.log('回退到直接代理原始文件...');
+                const originalExt = type === 'audio' ? 'm4a' : 'm4s';
+                const originalFilename = filename.replace(`.${format}`, `.${originalExt}`);
+                await this.streamProxy(url, res, originalFilename);
+            } else {
+                throw error;
+            }
         }
     }
 
