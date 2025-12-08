@@ -18,7 +18,7 @@ class BilibiliService {
         // 下载目录（使用系统临时目录）
         this.downloadDir = path.join(os.tmpdir(), 'bilibili-downloads');
         this.ensureDownloadDir();
-        
+
         // WBI 签名所需的混淆表
         this.mixinKeyEncTab = [
             46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35,
@@ -26,11 +26,11 @@ class BilibiliService {
             37, 48, 7, 16, 24, 55, 40, 61, 26, 17, 0, 1, 60, 51, 30, 4,
             22, 25, 54, 21, 56, 59, 6, 63, 57, 62, 11, 36, 20, 34, 44, 52
         ];
-        
+
         // 缓存 WBI keys
         this.wbiKeys = null;
         this.wbiKeysExpire = 0;
-        
+
         // 通用请求头（模拟真实Chrome浏览器）
         this.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
@@ -46,11 +46,19 @@ class BilibiliService {
             'Sec-Ch-Ua-Mobile': '?0',
             'Sec-Ch-Ua-Platform': '"Windows"'
         };
-        
+
         // 生成基础Cookie（提升未登录用户画质到1080P）
         this.baseCookie = this.generateBaseCookie();
+        // 环境提供的 SESSDATA，便于绕过 412/限清晰度（不持久存储）
+        this.envCookies = this.loadEnvCookies();
+
+        // TV 接口 appkey 与签名密钥（参考 BBDown）
+        this.tvAppKey = '4409e2ce8ffd0b60';
+        this.tvAppSecret = '59b43e04ad6965f34319062b478f83dd';
+        // 环境提供的 TV access_key（可选）
+        this.tvAccessKey = process.env.BILI_TV_ACCESS_KEY || '';
     }
-    
+
     /**
      * 生成基础Cookie（参考GitHub开源项目，模拟真实浏览器获取高画质）
      */
@@ -81,7 +89,7 @@ class BilibiliService {
             `PVID=1`
         ].join('; ');
     }
-    
+
     /**
      * 生成sid（会话ID）
      */
@@ -93,7 +101,7 @@ class BilibiliService {
         }
         return result;
     }
-    
+
     /**
      * 生成buvid4
      */
@@ -105,7 +113,7 @@ class BilibiliService {
         }
         return result;
     }
-    
+
     /**
      * 生成buvid_fp
      */
@@ -117,7 +125,205 @@ class BilibiliService {
         }
         return result;
     }
-    
+
+    /**
+     * 读取环境变量中的登录 Cookie（可选：BILI_SESSDATA/BILI_JCT/BILI_DEDEUID）
+     */
+    loadEnvCookies() {
+        const SESSDATA = process.env.BILI_SESSDATA || '';
+        const bili_jct = process.env.BILI_JCT || '';
+        const DedeUserID = process.env.BILI_DEDEUSERID || '';
+        if (!SESSDATA) return null;
+        return {
+            SESSDATA,
+            bili_jct,
+            DedeUserID
+        };
+    }
+
+    /**
+     * TV 接口签名
+     */
+    signTvParams(params) {
+        const ordered = Object.keys(params).sort().map(k => `${k}=${params[k]}`).join('&');
+        const md5 = crypto.createHash('md5').update(ordered + this.tvAppSecret).digest('hex');
+        return md5;
+    }
+
+    /**
+     * 尝试使用 APP 接口获取播放地址（高画质方案）
+     * 参考 BBDown 和 bilibili-API-collect 项目
+     */
+    async getPlayUrlByApp(bvid, cid, qn = 80) {
+        // Android APP 端的 appkey 和 appsec（取流专用）
+        const appkey = '1d8b6e7d45233436';
+        const appsec = '560c52ccd288fed045859ed18bffd973';
+
+        try {
+            const params = {
+                appkey: appkey,
+                cid: String(cid),
+                bvid: bvid,
+                qn: String(qn),
+                fnval: '4048',  // DASH格式 + HDR + 4K + AV1 + 8K
+                fourk: '1',
+                session: this.generateSid(),
+                mobi_app: 'android',
+                platform: 'android',
+                build: '6800300',
+                device: 'android',
+                ts: String(Math.floor(Date.now() / 1000))
+            };
+
+            // APP 签名算法
+            const sign = this.signAppParams(params, appsec);
+            params.sign = sign;
+
+            const headers = {
+                'User-Agent': 'Dalvik/2.1.0 (Linux; U; Android 12; SM-G9750 Build/SP1A.210812.016) 6.80.0 os/android model/SM-G9750 mobi_app/android build/6800300 channel/bili innerVer/6800310 osVer/12 network/2',
+                'Referer': 'https://www.bilibili.com/',
+                'App-Key': 'android'
+            };
+
+            // 使用官方 APP API
+            const apiUrl = `https://api.bilibili.com/x/player/playurl?${new URLSearchParams(params)}`;
+            const resp = await axios.get(apiUrl, {
+                headers,
+                timeout: 8000
+            });
+
+            if (resp.data && resp.data.code === 0 && resp.data.data) {
+                const data = resp.data.data;
+                if (data.dash && data.dash.video && data.dash.video.length > 0) {
+                    const maxQuality = Math.max(...data.dash.video.map(v => v.id));
+                    console.log(`APP playurl 返回最高画质: ${maxQuality}`);
+                    return data;
+                }
+            }
+        } catch (e) {
+            console.log('APP playurl 失败:', e.message);
+        }
+        return null;
+    }
+
+    /**
+     * APP API 签名算法
+     * 参考 bilibili-API-collect 官方 TypeScript 示例
+     * https://socialsisteryi.github.io/bilibili-API-collect/docs/misc/sign/APP.html
+     */
+    signAppParams(params, appsec) {
+        // 使用官方文档推荐的 URLSearchParams 方法
+        const searchParams = new URLSearchParams(params);
+        searchParams.sort();  // 关键：按 key 排序
+        return crypto.createHash('md5').update(searchParams.toString() + appsec).digest('hex');
+    }
+
+    /**
+     * 使用 HTML5 模式获取播放地址（支持登录用户获取更高画质）
+     * 参考 hellotik.app 等网站的实现方式
+     */
+    async getPlayUrlByHtml5(bvid, cid, qn = 80, cookies = null) {
+        try {
+            // 方案1: 使用 platform=html5 + high_quality=1 + try_look=1
+            const params = {
+                bvid: bvid,
+                cid: cid,
+                qn: 127,  // 请求最高画质
+                fnval: 4048,  // DASH 格式
+                fnver: 0,
+                fourk: 1,
+                platform: 'pc',  // 使用 pc 而非 html5
+                high_quality: 1,    // 关键参数！
+                try_look: 1,  // 尝试无登录获取高画质
+                otype: 'json'
+            };
+
+            // 关键修复：使用用户登录 Cookie（如果有）
+            const cookieStr = this.getEffectiveCookie(cookies);
+            // 调试日志：检查 Cookie 是否包含 SESSDATA
+            const hasSessData = cookieStr.includes('SESSDATA=') && !cookieStr.includes('SESSDATA=;') && !cookieStr.includes('SESSDATA=,');
+            console.log(`🔑 Cookie 状态: ${hasSessData ? '已登录 (含SESSDATA)' : '未登录'}`);
+
+            const headers = {
+                ...this.headers,
+                'Cookie': cookieStr
+            };
+
+            const apiUrl = `https://api.bilibili.com/x/player/playurl?${new URLSearchParams(params)}`;
+            console.log('HTML5 API 请求:', apiUrl);
+
+            const resp = await axios.get(apiUrl, {
+                headers,
+                timeout: 10000
+            });
+
+            if (resp.data && resp.data.code === 0 && resp.data.data) {
+                const data = resp.data.data;
+                if (data.dash && data.dash.video && data.dash.video.length > 0) {
+                    const maxQuality = Math.max(...data.dash.video.map(v => v.id));
+                    console.log(`HTML5 playurl 返回最高画质: ${maxQuality}`);
+                    return data;
+                }
+                // 如果没有 DASH，尝试使用 durl
+                if (data.durl && data.durl.length > 0) {
+                    console.log(`HTML5 playurl 返回 FLV 格式, 画质: ${data.quality}`);
+                    return data;
+                }
+            }
+        } catch (e) {
+            console.log('HTML5 playurl 失败:', e.message);
+        }
+
+        // 方案2: 尝试使用 pgc 接口（番剧/电影接口，有时候限制较少）
+        try {
+            const pgcParams = {
+                bvid: bvid,
+                cid: cid,
+                qn: 80,
+                fnval: 4048,
+                fnver: 0,
+                fourk: 1,
+                support_multi_audio: true,
+                drm_tech_type: 2
+            };
+
+            const pgcUrl = `https://api.bilibili.com/pgc/player/web/playurl?${new URLSearchParams(pgcParams)}`;
+
+            const resp2 = await axios.get(pgcUrl, {
+                headers: this.headers,
+                timeout: 8000
+            });
+
+            if (resp2.data && resp2.data.code === 0 && resp2.data.result) {
+                const data = resp2.data.result;
+                if (data.dash && data.dash.video && data.dash.video.length > 0) {
+                    const maxQuality = Math.max(...data.dash.video.map(v => v.id));
+                    console.log(`PGC playurl 返回最高画质: ${maxQuality}`);
+                    return data;
+                }
+            }
+        } catch (e) {
+            console.log('PGC playurl 失败:', e.message);
+        }
+
+        return null;
+    }
+
+    /**
+     * 获取有效的 Cookie 字符串（优先：环境 Cookie > 登录 Cookie > 基础 Cookie）
+     */
+    getEffectiveCookie(cookies = null) {
+        if (this.envCookies?.SESSDATA) {
+            const parts = [];
+            if (this.envCookies.SESSDATA) parts.push(`SESSDATA=${this.envCookies.SESSDATA}`);
+            if (this.envCookies.bili_jct) parts.push(`bili_jct=${this.envCookies.bili_jct}`);
+            if (this.envCookies.DedeUserID) parts.push(`DedeUserID=${this.envCookies.DedeUserID}`);
+            return parts.join('; ');
+        }
+        if (cookies) return this.formatCookies(cookies);
+        return this.baseCookie;
+    }
+
     /**
      * 生成b_lsid
      */
@@ -133,7 +339,7 @@ class BilibiliService {
         }
         return `${part1}_${Date.now().toString(16).toUpperCase()}`;
     }
-    
+
     /**
      * 生成buvid3
      */
@@ -149,12 +355,12 @@ class BilibiliService {
         }
         return result + 'infoc';
     }
-    
+
     /**
      * 生成UUID
      */
     generateUUID() {
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
             const r = Math.random() * 16 | 0;
             const v = c === 'x' ? r : (r & 0x3 | 0x8);
             return v.toString(16).toUpperCase();
@@ -166,7 +372,7 @@ class BilibiliService {
      */
     async getWbiKeys(cookies = null) {
         const now = Date.now();
-        
+
         // 延长缓存时间到2小时
         if (this.wbiKeys && now < this.wbiKeysExpire) {
             return this.wbiKeys;
@@ -174,11 +380,11 @@ class BilibiliService {
 
         try {
             const cookieStr = cookies ? this.formatCookies(cookies) : this.baseCookie;
-            const headers = { 
+            const headers = {
                 ...this.headers,
                 'Cookie': cookieStr
             };
-            
+
             const response = await axios.get('https://api.bilibili.com/x/web-interface/nav', {
                 headers,
                 timeout: 10000 // 减少到10秒
@@ -188,10 +394,10 @@ class BilibiliService {
                 const { img_url, sub_url } = response.data.data.wbi_img;
                 const imgKey = img_url.split('/').pop().split('.')[0];
                 const subKey = sub_url.split('/').pop().split('.')[0];
-                
+
                 this.wbiKeys = { imgKey, subKey };
                 this.wbiKeysExpire = now + 2 * 60 * 60 * 1000; // 缓存2小时
-                
+
                 return this.wbiKeys;
             }
         } catch (error) {
@@ -199,10 +405,10 @@ class BilibiliService {
             // 使用备用的硬编码keys（不常变化）
             return this.getFallbackWbiKeys();
         }
-        
+
         return this.getFallbackWbiKeys();
     }
-    
+
     /**
      * 获取备用WBI keys（当API失败时使用）
      */
@@ -244,18 +450,18 @@ class BilibiliService {
 
         const { imgKey, subKey } = wbiKeys;
         const mixinKey = this.getMixinKey(imgKey + subKey);
-        
+
         const currTime = Math.round(Date.now() / 1000);
         const newParams = { ...params, wts: currTime };
-        
+
         const keys = Object.keys(newParams).sort();
         const query = keys.map(key => {
             const value = String(newParams[key]).replace(/[!'()*]/g, '');
             return `${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
         }).join('&');
-        
+
         const wRid = crypto.createHash('md5').update(query + mixinKey).digest('hex');
-        
+
         return { ...newParams, w_rid: wRid };
     }
 
@@ -265,36 +471,144 @@ class BilibiliService {
     extractVideoId(url) {
         const bvMatch = url.match(/BV([a-zA-Z0-9]+)/i);
         const avMatch = url.match(/av(\d+)/i);
-        
+
         if (bvMatch) return { bvid: `BV${bvMatch[1]}` };
         if (avMatch) return { aid: avMatch[1] };
         return null;
     }
 
     /**
+     * 规范化B站链接，去掉分享参数，仅保留 bvid 与 p
+     */
+    sanitizeBiliUrl(url) {
+        const id = this.extractVideoId(url);
+        if (!id || !id.bvid) return url;
+        const pMatch = String(url).match(/[?&]p=(\d+)/i);
+        const p = pMatch ? parseInt(pMatch[1], 10) : null;
+        const base = `https://www.bilibili.com/video/${id.bvid}/`;
+        return p ? `${base}?p=${p}` : base;
+    }
+
+    /**
+     * 从原始输入中提取 B站相关链接（优先 bilibili/b23.tv 等，过滤其他网站）
+     */
+    extractFirstUrl(raw) {
+        if (!raw) return '';
+        const str = String(raw);
+
+        // 提取所有 URL
+        const allUrls = str.match(/https?:\/\/[^\s\u4e00-\u9fa5\u3010\u3011【】]+/gi) || [];
+
+        // B站相关域名正则
+        const biliPattern = /(bilibili\.com|b23\.tv|bili22\.cn|bili2233\.cn|bili23\.cn|hdslb\.com)/i;
+
+        // 优先查找 B站相关链接
+        for (const url of allUrls) {
+            if (biliPattern.test(url)) {
+                return url.replace(/[】\u3011]$/, ''); // 去除可能的中文括号
+            }
+        }
+
+        // 如果没有 B站链接，返回第一个 URL（兼容其他平台）
+        if (allUrls.length > 0) {
+            return allUrls[0].replace(/[】\u3011]$/, '');
+        }
+
+        return str.trim();
+    }
+
+    /**
+     * 解析短链为真实地址（支持 b23.tv / bili22.cn / bili2233.cn / bili23.cn / btv）
+     */
+    async resolveShortUrl(url) {
+        const normalized = this.extractFirstUrl(url);
+        if (!normalized) return url;
+
+        const needResolve = /(b23\.tv|bili22\.cn|bili2233\.cn|bili23\.cn|btv)/i;
+        if (!needResolve.test(normalized)) return normalized;
+
+        // axios 默认跟随重定向，取最终跳转地址
+        try {
+            const resp = await axios.get(normalized, {
+                maxRedirects: 5,
+                timeout: 8000,
+                validateStatus: (s) => s >= 200 && s < 400 // 允许 3xx
+            });
+            const finalUrl = resp?.request?.res?.responseUrl || resp?.request?._currentUrl;
+            if (finalUrl) return finalUrl;
+        } catch (e) {
+            // 再尝试一次 HEAD 获取 Location
+            try {
+                const headResp = await axios.head(normalized, {
+                    maxRedirects: 0,
+                    timeout: 5000,
+                    validateStatus: (s) => s >= 200 && s < 400
+                });
+                const loc = headResp.headers?.location;
+                if (loc) return loc.startsWith('http') ? loc : `https:${loc}`;
+            } catch (e2) {
+                // ignore
+            }
+        }
+        return url;
+    }
+
+    /**
+     * 通过 yt-dlp 探测最高可用分辨率（用于未登录兜底）
+     * 粗略映射分辨率到 qn：>=2160 ->120, >=1080 ->80, >=720 ->64, >=480 ->32, else 16
+     */
+    async probeMaxQByYtdlp(url) {
+        try {
+            const info = await ytdlpService.getVideoInfo(url, {
+                headers: {
+                    'User-Agent': this.headers['User-Agent'],
+                    'Referer': this.headers['Referer'],
+                    'Origin': 'https://www.bilibili.com',
+                    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.7'
+                },
+                cookie: this.getEffectiveCookie()
+            });
+            if (!info || !info.formats || info.formats.length === 0) return null;
+            const maxHeight = info.formats
+                .map(f => f.height || 0)
+                .reduce((a, b) => Math.max(a, b), 0);
+            if (maxHeight >= 2160) return 120;
+            if (maxHeight >= 1080) return 80;
+            if (maxHeight >= 720) return 64;
+            if (maxHeight >= 480) return 32;
+            if (maxHeight > 0) return 16;
+            return null;
+        } catch (e) {
+            console.log('yt-dlp 探测最高画质失败:', e.message);
+            return null;
+        }
+    }
+
+    /**
      * 获取视频信息（优化：减少超时时间提升速度）
      */
     async getVideoInfo(url, cookies = null) {
-        const videoId = this.extractVideoId(url);
+        const finalUrl = this.sanitizeBiliUrl(await this.resolveShortUrl(url));
+        const videoId = this.extractVideoId(finalUrl);
         if (!videoId) {
             throw new Error('无法从链接中提取视频ID');
         }
 
-        const params = videoId.bvid 
+        const params = videoId.bvid
             ? { bvid: videoId.bvid }
             : { aid: videoId.aid };
 
         // 使用基础Cookie或用户Cookie
-        const cookieStr = cookies ? this.formatCookies(cookies) : this.baseCookie;
+        const cookieStr = this.getEffectiveCookie(cookies);
         const signedParams = await this.encWbi(params, cookies);
-        
-        const headers = { 
+
+        const headers = {
             ...this.headers,
             'Cookie': cookieStr
         };
-        
+
         const apiUrl = `https://api.bilibili.com/x/web-interface/view?${new URLSearchParams(signedParams)}`;
-        
+
         const response = await axios.get(apiUrl, {
             headers,
             timeout: 15000 // 减少到15秒提升速度
@@ -303,7 +617,7 @@ class BilibiliService {
         if (response.data && response.data.code === 0) {
             return response.data.data;
         }
-        
+
         throw new Error(`获取视频信息失败: ${response.data?.message || '未知错误'}`);
     }
 
@@ -312,8 +626,8 @@ class BilibiliService {
      */
     async getPlayUrl(bvid, cid, qn = 80, cookies = null) {
         // 使用基础Cookie或用户Cookie
-        const cookieStr = cookies ? this.formatCookies(cookies) : this.baseCookie;
-        
+        const cookieStr = this.getEffectiveCookie(cookies);
+
         // 尝试多个API获取最高画质
         const apis = [
             // 标准WBI API
@@ -327,7 +641,7 @@ class BilibiliService {
                 needSign: false
             }
         ];
-        
+
         // 只请求一次最高画质（120），API会自动返回可用画质列表
         for (const api of apis) {
             try {
@@ -345,18 +659,18 @@ class BilibiliService {
                     mobi_app: 'pc',
                     ts: Math.floor(Date.now() / 1000)
                 };
-                
+
                 const finalParams = api.needSign ? await this.encWbi(params, cookies) : params;
-                
-                const headers = { 
+
+                const headers = {
                     ...this.headers,
                     'Cookie': cookieStr,
                     'Accept-Encoding': 'gzip, deflate, br',
                     'Accept-Language': 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7'
                 };
-                
+
                 const apiUrl = `${api.url}?${new URLSearchParams(finalParams)}`;
-                
+
                 const response = await axios.get(apiUrl, {
                     headers,
                     timeout: 8000
@@ -375,7 +689,7 @@ class BilibiliService {
                 console.log(`API ${api.url} 失败:`, error.message);
             }
         }
-        
+
         // 如果都失败，使用标准API的结果
         const params = {
             bvid: bvid,
@@ -386,13 +700,13 @@ class BilibiliService {
             fourk: 1,
             platform: 'pc'
         };
-        
+
         const signedParams = await this.encWbi(params, cookies);
-        const headers = { 
+        const headers = {
             ...this.headers,
             'Cookie': cookieStr
         };
-        
+
         const response = await axios.get(`https://api.bilibili.com/x/player/wbi/playurl?${new URLSearchParams(signedParams)}`, {
             headers,
             timeout: 10000
@@ -401,7 +715,7 @@ class BilibiliService {
         if (response.data && response.data.code === 0) {
             return response.data.data;
         }
-        
+
         throw new Error(`获取播放地址失败: ${response.data?.message || '未知错误'}`);
     }
 
@@ -410,25 +724,40 @@ class BilibiliService {
      */
     async parseVideo(url, cookies = null) {
         try {
-            const videoInfo = await this.getVideoInfo(url, cookies);
-            
+            const finalUrl = this.sanitizeBiliUrl(await this.resolveShortUrl(url));
+            const videoInfo = await this.getVideoInfo(finalUrl, cookies);
+
             const bvid = videoInfo.bvid;
             const cid = videoInfo.pages?.[0]?.cid || videoInfo.cid;
-            
+
             if (!cid) {
                 throw new Error('无法获取视频 CID');
             }
 
             let playData = null;
             let downloadLinks = [];
-            
+
             try {
-                playData = await this.getPlayUrl(bvid, cid, 120, cookies);
-                
+                // 如果已登录，优先使用 WBI 签名 API（获取 1080P60/4K）
+                if (cookies) {
+                    console.log('🔐 已登录用户，优先使用 WBI API 获取高画质');
+                    playData = await this.getPlayUrl(bvid, cid, 120, cookies);
+                }
+
+                // 如果未登录或 WBI 失败，尝试 HTML5 模式（无登录可获取 1080P）
+                if (!playData) {
+                    playData = await this.getPlayUrlByHtml5(bvid, cid, 120, cookies);
+                }
+
+                // 如果 HTML5 失败，尝试 APP 模式
+                if (!playData) {
+                    playData = await this.getPlayUrlByApp(bvid, cid, 120);
+                }
+
                 if (playData && playData.dash) {
                     const videos = playData.dash.video || [];
                     const audios = playData.dash.audio || [];
-                    
+
                     const qualityMap = new Map();
                     videos.forEach(video => {
                         const qn = video.id;
@@ -440,63 +769,66 @@ class BilibiliService {
                             });
                         }
                     });
-                    
+
                     const bestAudio = audios.length > 0 ? audios[0] : null;
-                    
+
                     qualityMap.forEach((info, qn) => {
                         downloadLinks.push({
                             quality: info.qualityName,
                             qn: qn,
                             needVip: info.needVip,
-                            url: url,
+                            url: finalUrl,
                             needYtdlp: true
                         });
                     });
-                    
+
                     downloadLinks.sort((a, b) => b.qn - a.qn);
                 }
             } catch (playError) {
                 console.log('获取播放地址失败:', playError.message);
             }
 
-            // 定义所有可能的画质选项
+            // 定义所有可能的画质选项（整合 1080P60和1080P高码率为统一选项）
             const allQualities = [
                 { quality: '4K 超清', qn: 120, needVip: true },
-                { quality: '1080P 60帧', qn: 116, needVip: true },
-                { quality: '1080P 高码率', qn: 112, needVip: true },
+                { quality: '1080P 高帧率', qn: 116, needVip: true },  // 优先60帧，回退到高码率(112)
                 { quality: '1080P', qn: 80, needVip: false },
                 { quality: '720P', qn: 64, needVip: false },
                 { quality: '480P', qn: 32, needVip: false },
                 { quality: '360P', qn: 16, needVip: false }
             ];
-            
+
             // 获取API实际返回的画质qn列表
             const existingQns = new Set(downloadLinks.map(link => link.qn));
-            
+
             // 如果API没有返回任何画质，免费画质默认可用，VIP画质不可用
             if (downloadLinks.length === 0) {
                 downloadLinks = allQualities.map(q => ({
                     ...q,
-                    url: url,
+                    url: finalUrl,
                     needYtdlp: true,
                     exists: !q.needVip // 免费画质(1080P及以下)默认可用
                 }));
             } else {
                 // 找出API返回的最高画质
                 const maxExistingQn = Math.max(...existingQns);
-                
-                // 补充所有可能的画质选项，标记最高可用画质
+                // 2024.12: 禁用 yt-dlp 探测（太慢且始终 412），直接使用 1080P 作为兜底
+                const ensuredMaxQn = Math.max(maxExistingQn, 80); // 未登录兜底1080P
+
+                // 补充所有可能的画质选项，标记最高可用画质（匿名也至少保留1080P）
                 const finalLinks = [];
                 allQualities.forEach(quality => {
-                    const exists = existingQns.has(quality.qn) || quality.qn <= maxExistingQn;
+                    const exists =
+                        existingQns.has(quality.qn) ||
+                        (!quality.needVip && quality.qn <= ensuredMaxQn);
                     finalLinks.push({
                         quality: quality.quality,
                         qn: quality.qn,
                         needVip: quality.needVip,
-                        url: url,
+                        url: finalUrl,
                         needYtdlp: true,
                         exists: exists,
-                        maxQuality: maxExistingQn // 标记视频支持的最高画质
+                        maxQuality: ensuredMaxQn // 标记视频支持的最高画质（至少1080P）
                     });
                 });
                 downloadLinks = finalLinks;
@@ -509,12 +841,12 @@ class BilibiliService {
                 duration: this.formatDuration(videoInfo.duration),
                 thumbnail: videoInfo.pic || '',
                 platform: 'B站',
-                videoUrl: url,
+                videoUrl: finalUrl,
                 downloadLinks: downloadLinks,
                 bvid: bvid,
                 cid: cid
             };
-            
+
         } catch (error) {
             throw new Error(`B站视频解析失败: ${error.message}`);
         }
@@ -525,11 +857,12 @@ class BilibiliService {
      */
     async downloadWithYtdlp(url, qn = 80, res, format = 'mp4', nameFormat = 'title') {
         try {
-            // 获取视频信息用于生成文件名
-            const videoInfo = await this.getVideoInfo(url, null);
+            const finalUrl = this.sanitizeBiliUrl(await this.resolveShortUrl(url));
+            // 获取视频信息用于生成文件名（携带基础Header/Cookie，避免412）
+            const videoInfo = await this.getVideoInfo(finalUrl, null);
             const title = (videoInfo.title || 'video').replace(/[<>:"/\\|?*]/g, '_').substring(0, 50);
             const author = (videoInfo.owner?.name || 'UP主').replace(/[<>:"/\\|?*]/g, '_').substring(0, 20);
-            
+
             // 根据命名格式生成文件名
             let baseName;
             switch (nameFormat) {
@@ -542,7 +875,7 @@ class BilibiliService {
                 default:
                     baseName = title;
             }
-            
+
             // 画质映射到yt-dlp格式选择器
             const qualityMap = {
                 120: 'bestvideo[height<=2160]+bestaudio/best[height<=2160]',  // 4K
@@ -553,49 +886,59 @@ class BilibiliService {
                 32: 'bestvideo[height<=480]+bestaudio/best[height<=480]',      // 480P
                 16: 'bestvideo[height<=360]+bestaudio/best[height<=360]'       // 360P
             };
-            
+
             const formatSelector = qualityMap[qn] || qualityMap[80];
-            
+
             // 画质名称（用于文件名）
             const qNameMap = {
-                120: '4K', 116: '1080P60', 112: '1080P+', 80: '1080P', 
+                120: '4K', 116: '1080P60', 112: '1080P+', 80: '1080P',
                 64: '720P', 32: '480P', 16: '360P'
             };
             const qualityName = qNameMap[qn] || '1080P';
             const finalName = `${qualityName}_${baseName}`;
-            
+
             console.log(`yt-dlp 下载: 画质=${qn}, 格式选择器=${formatSelector}`);
-            
+
             // 注意：延迟设置响应头，等确认yt-dlp成功后再设置，以便失败时可以回退
-            
+
             // 构建yt-dlp命令（添加Cookie和User-Agent绕过412错误）
             const check = await ytdlpService.checkAvailable();
             const userAgent = this.headers['User-Agent'];
             const referer = this.headers['Referer'];
-            
+            const origin = 'https://www.bilibili.com';
+            const acceptLang = 'zh-CN,zh;q=0.9,en;q=0.7';
+            const cookieStr = this.getEffectiveCookie(null);
+            const cookieFile = cookieStr ? ytdlpService.buildCookieFile(cookieStr) : null;
+
             const args = [
                 '-f', formatSelector,
                 '--merge-output-format', format,
                 '--no-playlist',
                 '--add-header', `User-Agent:${userAgent}`,
                 '--add-header', `Referer:${referer}`,
-                '--add-header', `Cookie:${this.baseCookie}`,
+                '--add-header', `Origin:${origin}`,
+                '--add-header', `Accept-Language:${acceptLang}`,
                 '--no-warnings',
                 '--quiet',
                 '--progress',
                 '-o', '-',  // 输出到stdout
-                url
+                finalUrl
             ];
-            
+            if (cookieFile) {
+                args.push('--cookies', cookieFile);
+            } else if (cookieStr) {
+                args.push('--add-header', `Cookie:${cookieStr}`);
+            }
+
             const ytdlp = spawn(check.command, args, {
                 stdio: ['ignore', 'pipe', 'pipe']
             });
-            
+
             // 收集错误信息
             let errorOutput = '';
             let hasError = false;
             let headersSet = false;
-            
+
             // 使用Promise包装以便捕获错误
             return new Promise((resolve, reject) => {
                 // 先监听错误，如果立即出错就不pipe
@@ -606,7 +949,7 @@ class BilibiliService {
                         reject(new Error('YTDLP_412_ERROR'));
                     }
                 }, 3000);
-                
+
                 // 错误处理（在pipe之前监听）
                 ytdlp.stderr.on('data', (data) => {
                     const msg = data.toString();
@@ -631,14 +974,14 @@ class BilibiliService {
                         console.log('yt-dlp:', msg.trim());
                     }
                 });
-                
+
                 ytdlp.on('error', (error) => {
                     clearTimeout(errorTimeout);
                     console.error('yt-dlp 执行错误:', error);
                     hasError = true;
                     reject(error);
                 });
-                
+
                 // 成功开始输出后设置响应头并pipe
                 ytdlp.stdout.once('data', (firstChunk) => {
                     clearTimeout(errorTimeout);
@@ -658,7 +1001,7 @@ class BilibiliService {
                         });
                     }
                 });
-                
+
                 ytdlp.on('close', (code) => {
                     clearTimeout(errorTimeout);
                     if (code !== 0 || hasError) {
@@ -682,7 +1025,7 @@ class BilibiliService {
                         resolve();
                     }
                 });
-                
+
                 // 处理客户端断开连接
                 res.on('close', () => {
                     clearTimeout(errorTimeout);
@@ -691,7 +1034,7 @@ class BilibiliService {
                     }
                 });
             });
-            
+
         } catch (error) {
             // 如果是412错误，重新抛出以便上层处理
             if (error.message === 'YTDLP_412_ERROR') {
@@ -712,88 +1055,87 @@ class BilibiliService {
      */
     async downloadWithQuality(url, qn = 80, cookies = null, res, format = 'mp4', nameFormat = 'title') {
         try {
-            console.log('开始下载 B站视频:', { url, qn, nameFormat, hasLogin: !!cookies });
-            
+            const finalUrl = this.sanitizeBiliUrl(await this.resolveShortUrl(url));
+            console.log('开始下载 B站视频:', { url: finalUrl, qn, nameFormat, hasLogin: !!cookies });
+
             // 检查响应头是否已发送（防止重复设置）
             if (res.headersSent) {
                 console.error('响应头已发送，无法继续下载');
                 throw new Error('响应头已发送，无法继续下载');
             }
-            
-            // 优先使用 yt-dlp 下载（支持高画质且更稳定）
-            const ytdlpCheck = await ytdlpService.checkAvailable();
-            if (ytdlpCheck.available) {
-                try {
-                    console.log('使用 yt-dlp 下载（优先方案）');
-                    return await this.downloadWithYtdlp(url, qn, res, format, nameFormat);
-                } catch (error) {
-                    // 如果yt-dlp失败（如412错误），检查是否可以回退
-                    if (error.message === 'YTDLP_412_ERROR') {
-                        // 如果响应头还没发送，可以回退
-                        if (!res.headersSent) {
-                            console.log('yt-dlp 遇到412错误，回退到原生API下载');
-                        } else {
-                            // 响应头已发送，无法回退，直接抛出错误
-                            console.error('yt-dlp 已开始下载但失败，无法回退');
-                            throw new Error('yt-dlp 下载失败且无法回退');
-                        }
-                    } else if (error.message === 'YTDLP_ALREADY_STARTED') {
-                        // 已经开始下载但失败，无法回退
-                        throw new Error('yt-dlp 下载已开始但失败');
-                    } else {
-                        throw error; // 其他错误直接抛出
-                    }
-                }
-            }
-            
-            console.log('yt-dlp 不可用，使用原生API下载');
-            
+
+            // 2024.12: 禁用 yt-dlp 对 B站的尝试（始终返回 412 错误，浪费时间）
+            // 直接使用原生 API 下载（更快更稳定）
+            console.log('📥 使用原生 API 快速下载...');
+
             // 获取视频信息
-            const videoInfo = await this.getVideoInfo(url, cookies);
+            const videoInfo = await this.getVideoInfo(finalUrl, cookies);
             const bvid = videoInfo.bvid;
             const cid = videoInfo.pages?.[0]?.cid || videoInfo.cid;
-            
+
             if (!cid) {
                 throw new Error('无法获取视频 CID');
             }
-            
-            // 获取播放地址
-            const playData = await this.getPlayUrl(bvid, cid, qn, cookies);
-            
+
+            // 获取播放地址（已登录时优先使用 WBI API 获取高画质）
+            let playData = null;
+            if (cookies) {
+                console.log('🔐 已登录用户，使用 WBI API 获取高画质');
+                playData = await this.getPlayUrl(bvid, cid, qn, cookies);
+            }
+            if (!playData) {
+                playData = await this.getPlayUrlByHtml5(bvid, cid, qn, cookies);
+            }
+            if (!playData) {
+                playData = await this.getPlayUrlByApp(bvid, cid, qn);
+            }
+
             if (!playData || !playData.dash) {
                 throw new Error('无法获取视频流信息');
             }
-            
+
             const { video: videos, audio: audios } = playData.dash;
-            
-            // 选择对应画质的视频流（优先精确匹配，否则自动降级）
+
+            // 选择对应画质的视频流（优先精确匹配，否则智能回退）
             let selectedVideo = videos.find(v => v.id === qn);
             if (!selectedVideo) {
-                // 选择小于等于请求画质的最高画质（自动降级）
-                const lowerQualities = videos.filter(v => v.id <= qn);
-                if (lowerQualities.length > 0) {
-                    selectedVideo = lowerQualities.reduce((prev, curr) => curr.id > prev.id ? curr : prev);
-                } else {
-                    // 如果没有更低的画质，选择最低的可用画质
-                    selectedVideo = videos.reduce((prev, curr) => curr.id < prev.id ? curr : prev);
+                // 特殊处理：1080P 高帧率 (116/112) 互相回退
+                if (qn === 116 || qn === 112) {
+                    // 先尝试另一个高帧率选项
+                    const altQn = qn === 116 ? 112 : 116;
+                    selectedVideo = videos.find(v => v.id === altQn);
+                    if (selectedVideo) {
+                        console.log(`请求画质 ${qn} 不可用，自动切换到 ${altQn}`);
+                    }
                 }
-                console.log(`请求画质 ${qn} 不可用，自动降级到 ${selectedVideo.id}`);
+
+                // 如果高帧率选项都不可用，再向下降级
+                if (!selectedVideo) {
+                    const lowerQualities = videos.filter(v => v.id <= qn);
+                    if (lowerQualities.length > 0) {
+                        selectedVideo = lowerQualities.reduce((prev, curr) => curr.id > prev.id ? curr : prev);
+                    } else {
+                        // 如果没有更低的画质，选择最高可用画质
+                        selectedVideo = videos.reduce((prev, curr) => curr.id > prev.id ? curr : prev);
+                    }
+                    console.log(`请求画质 ${qn} 不可用，自动降级到 ${selectedVideo.id}`);
+                }
             }
-            
+
             const selectedAudio = audios && audios.length > 0 ? audios[0] : null;
-            
+
             const videoUrl = selectedVideo.baseUrl || selectedVideo.base_url;
             const audioUrl = selectedAudio ? (selectedAudio.baseUrl || selectedAudio.base_url) : null;
-            
+
             // 实际下载的画质名称
             const actualQn = selectedVideo.id;
             const qualityName = this.getQualityName(actualQn).replace(/\s+/g, '');
-            
+
             // 根据命名格式生成文件名（画质在第一位）
             const timestamp = Date.now();
             const title = (videoInfo.title || 'video').replace(/[<>:"/\\|?*]/g, '_').substring(0, 50);
             const author = (videoInfo.owner?.name || 'UP主').replace(/[<>:"/\\|?*]/g, '_').substring(0, 20);
-            
+
             let baseName;
             switch (nameFormat) {
                 case 'title-author':
@@ -809,30 +1151,30 @@ class BilibiliService {
             const videoFile = path.join(this.downloadDir, `${timestamp}_video.m4s`);
             const audioFile = path.join(this.downloadDir, `${timestamp}_audio.m4s`);
             const outputFile = path.join(this.downloadDir, `${finalTitle}.${format}`);
-            
+
             // 下载视频流
-            console.log('下载视频流...');
-            await this.downloadFile(videoUrl, videoFile);
-            
+            console.log('⬇️ 开始下载视频流...');
+            await this.downloadFile(videoUrl, videoFile, '视频流');
+
             if (audioUrl) {
                 // 下载音频流
-                console.log('下载音频流...');
-                await this.downloadFile(audioUrl, audioFile);
-                
+                console.log('⬇️ 开始下载音频流...');
+                await this.downloadFile(audioUrl, audioFile, '音频流');
+
                 // 检查 ffmpeg 并合并
                 const hasFfmpeg = await this.checkFfmpeg();
                 console.log('FFmpeg 可用:', hasFfmpeg);
-                
+
                 if (hasFfmpeg) {
                     console.log(`合并音视频并转换为 ${format} 格式...`);
                     await this.mergeVideoAudio(videoFile, audioFile, outputFile, format);
-                    
+
                     // 清理临时文件
                     try {
                         fs.unlinkSync(videoFile);
                         fs.unlinkSync(audioFile);
-                    } catch (e) {}
-                    
+                    } catch (e) { }
+
                     // 发送合并后的文件（检查响应头是否已设置）
                     if (res.headersSent) {
                         console.error('响应头已发送，无法继续下载');
@@ -843,21 +1185,21 @@ class BilibiliService {
                     res.setHeader('Content-Type', contentType);
                     res.setHeader('Content-Length', stats.size);
                     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(finalTitle)}.${format}"`);
-                    
+
                     const fileStream = fs.createReadStream(outputFile);
                     fileStream.pipe(res);
-                    
+
                     fileStream.on('end', () => {
                         // 清理输出文件
                         setTimeout(() => {
-                            try { fs.unlinkSync(outputFile); } catch (e) {}
+                            try { fs.unlinkSync(outputFile); } catch (e) { }
                         }, 5000);
                     });
-                    
+
                     return;
                 }
             }
-            
+
             // 如果没有音频或没有 ffmpeg，只发送视频（⚠️ 会导致没有声音）
             console.log('⚠️ 警告: FFmpeg不可用或无音频，将只返回视频流（无声音）');
             // 如果指定了格式且不是 m4s，尝试转换
@@ -878,13 +1220,13 @@ class BilibiliService {
                     fileStream.pipe(res);
                     fileStream.on('end', () => {
                         setTimeout(() => {
-                            try { fs.unlinkSync(convertedFile); fs.unlinkSync(videoFile); } catch (e) {}
+                            try { fs.unlinkSync(convertedFile); fs.unlinkSync(videoFile); } catch (e) { }
                         }, 5000);
                     });
                     return;
                 }
             }
-            
+
             if (res.headersSent) {
                 throw new Error('响应头已发送');
             }
@@ -893,16 +1235,16 @@ class BilibiliService {
             res.setHeader('Content-Type', contentType);
             res.setHeader('Content-Length', stats.size);
             res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeTitle)}.${format === 'm4s' ? 'mp4' : format}"`);
-            
+
             const fileStream = fs.createReadStream(videoFile);
             fileStream.pipe(res);
-            
+
             fileStream.on('end', () => {
                 setTimeout(() => {
-                    try { fs.unlinkSync(videoFile); } catch (e) {}
+                    try { fs.unlinkSync(videoFile); } catch (e) { }
                 }, 5000);
             });
-            
+
         } catch (error) {
             console.error('B站下载失败:', error);
             throw error;
@@ -917,7 +1259,7 @@ class BilibiliService {
     }
 
     /**
-     * 获取清晰度名称
+     * 获取清晰度名称（整合 1080P60 和 1080P高码率为 1080P 高帧率）
      */
     getQualityName(qn) {
         const qualityMap = {
@@ -925,8 +1267,8 @@ class BilibiliService {
             126: '杜比视界',
             125: 'HDR 真彩',
             120: '4K 超清',
-            116: '1080P60',
-            112: '1080P 高码率',
+            116: '1080P 高帧率',  // 整合60帧和高码率
+            112: '1080P 高帧率',  // 回退到高码率时也显示同样名称
             80: '1080P',
             74: '720P60',
             64: '720P',
@@ -944,7 +1286,7 @@ class BilibiliService {
         const hours = Math.floor(seconds / 3600);
         const minutes = Math.floor((seconds % 3600) / 60);
         const secs = Math.floor(seconds % 60);
-        
+
         if (hours > 0) {
             return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
         }
@@ -961,9 +1303,9 @@ class BilibiliService {
     }
 
     /**
-     * 下载文件
+     * 下载文件（带进度显示）
      */
-    async downloadFile(url, outputPath) {
+    async downloadFile(url, outputPath, label = '下载中') {
         const response = await axios({
             method: 'GET',
             url: url,
@@ -973,10 +1315,45 @@ class BilibiliService {
         });
 
         const writer = fs.createWriteStream(outputPath);
+
+        // 获取文件总大小
+        const totalSize = parseInt(response.headers['content-length'], 10) || 0;
+        let downloadedSize = 0;
+        let lastLogTime = Date.now();
+        let lastDownloadedSize = 0;
+
+        // 监听数据流显示进度
+        response.data.on('data', (chunk) => {
+            downloadedSize += chunk.length;
+            const now = Date.now();
+
+            // 每500ms更新一次进度
+            if (now - lastLogTime >= 500) {
+                const speed = ((downloadedSize - lastDownloadedSize) / ((now - lastLogTime) / 1000) / 1024 / 1024).toFixed(2);
+                const downloadedMB = (downloadedSize / 1024 / 1024).toFixed(2);
+
+                if (totalSize > 0) {
+                    const percent = Math.round((downloadedSize / totalSize) * 100);
+                    const totalMB = (totalSize / 1024 / 1024).toFixed(2);
+                    // 使用 \r 让进度条在同一行更新
+                    process.stdout.write(`\r📥 ${label}: ${percent}% | ${downloadedMB}/${totalMB}MB | ${speed}MB/s    `);
+                } else {
+                    process.stdout.write(`\r📥 ${label}: ${downloadedMB}MB | ${speed}MB/s    `);
+                }
+
+                lastLogTime = now;
+                lastDownloadedSize = downloadedSize;
+            }
+        });
+
         response.data.pipe(writer);
 
         return new Promise((resolve, reject) => {
-            writer.on('finish', () => resolve(outputPath));
+            writer.on('finish', () => {
+                const finalMB = (downloadedSize / 1024 / 1024).toFixed(2);
+                console.log(`\r✅ ${label}完成: ${finalMB}MB                    `);
+                resolve(outputPath);
+            });
             writer.on('error', reject);
         });
     }
@@ -1004,7 +1381,7 @@ class BilibiliService {
         return new Promise((resolve, reject) => {
             // 根据格式选择编码器
             const formatConfig = this.getFormatConfig(format);
-            
+
             const args = [
                 '-i', videoPath,
                 '-i', audioPath,
@@ -1043,65 +1420,65 @@ class BilibiliService {
     async downloadAudio(url, qn = 80, cookies = null, res) {
         try {
             console.log('开始下载 B站音频:', { url, qn, hasLogin: !!cookies });
-            
+
             // 获取视频信息
             const videoInfo = await this.getVideoInfo(url, cookies);
             const bvid = videoInfo.bvid;
             const cid = videoInfo.pages?.[0]?.cid || videoInfo.cid;
-            
+
             if (!cid) {
                 throw new Error('无法获取视频 CID');
             }
-            
+
             // 获取播放地址
             const playData = await this.getPlayUrl(bvid, cid, qn, cookies);
-            
+
             if (!playData || !playData.dash) {
                 throw new Error('无法获取音频流信息');
             }
-            
+
             const { audio: audios } = playData.dash;
-            
+
             if (!audios || audios.length === 0) {
                 throw new Error('无法获取音频流');
             }
-            
+
             // 选择最佳音频
             const bestAudio = audios[0];
             const audioUrl = bestAudio.baseUrl || bestAudio.base_url;
-            
+
             // 生成文件名
             const safeTitle = (videoInfo.title || 'audio').replace(/[<>:"/\\|?*]/g, '_').substring(0, 50);
             const audioFile = path.join(this.downloadDir, `${Date.now()}_audio.m4s`);
             const outputFile = path.join(this.downloadDir, `${safeTitle}.mp3`);
-            
+
             // 下载音频流
             console.log('下载音频流...');
             await this.downloadFile(audioUrl, audioFile);
-            
+
             // 检查 ffmpeg 并转换为 MP3
             const hasFfmpeg = await this.checkFfmpeg();
             if (hasFfmpeg) {
                 console.log('转换音频为 MP3...');
                 await this.convertToMp3(audioFile, outputFile);
-                
+
                 // 清理临时文件
                 try {
                     fs.unlinkSync(audioFile);
-                } catch (e) {}
-                
+                } catch (e) { }
+
                 // 发送转换后的文件
                 const stats = fs.statSync(outputFile);
                 res.setHeader('Content-Type', 'audio/mpeg');
                 res.setHeader('Content-Length', stats.size);
                 res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeTitle)}.mp3"`);
-                
+
                 const fileStream = fs.createReadStream(outputFile);
                 fileStream.pipe(res);
-                
+
                 fileStream.on('end', () => {
                     setTimeout(() => {
-                        try { fs.unlinkSync(outputFile); } catch (e) {}
+                        try { fs.unlinkSync(outputFile); } catch (e) { }
                     }, 5000);
                 });
             } else {
@@ -1110,17 +1487,17 @@ class BilibiliService {
                 res.setHeader('Content-Type', 'audio/mp4');
                 res.setHeader('Content-Length', stats.size);
                 res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeTitle)}.m4s"`);
-                
+
                 const fileStream = fs.createReadStream(audioFile);
                 fileStream.pipe(res);
-                
+
                 fileStream.on('end', () => {
                     setTimeout(() => {
-                        try { fs.unlinkSync(audioFile); } catch (e) {}
+                        try { fs.unlinkSync(audioFile); } catch (e) { }
                     }, 5000);
                 });
             }
-            
+
         } catch (error) {
             console.error('B站音频下载失败:', error);
             throw error;
@@ -1169,23 +1546,23 @@ class BilibiliService {
     async downloadCover(url, res) {
         try {
             console.log('开始下载 B站封面:', { url });
-            
+
             // 获取视频信息
             const videoInfo = await this.getVideoInfo(url);
-            
+
             if (!videoInfo.pic) {
                 throw new Error('该视频没有封面');
             }
-            
+
             // 处理封面URL
             let coverUrl = videoInfo.pic;
             if (coverUrl.startsWith('//')) {
                 coverUrl = 'https:' + coverUrl;
             }
-            
+
             // 生成文件名
             const safeTitle = (videoInfo.title || 'cover').replace(/[<>:"/\\|?*]/g, '_').substring(0, 50);
-            
+
             // 下载封面
             const response = await axios({
                 method: 'GET',
@@ -1194,17 +1571,17 @@ class BilibiliService {
                 timeout: 30000,
                 headers: this.headers
             });
-            
+
             // 设置响应头
             res.setHeader('Content-Type', response.headers['content-type'] || 'image/jpeg');
             if (response.headers['content-length']) {
                 res.setHeader('Content-Length', response.headers['content-length']);
             }
             res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeTitle)}.jpg"`);
-            
+
             // 流式传输
             response.data.pipe(res);
-            
+
         } catch (error) {
             console.error('B站封面下载失败:', error);
             throw error;
@@ -1217,25 +1594,25 @@ class BilibiliService {
     async downloadVideoOnly(url, qn = 80, cookies = null, res) {
         try {
             console.log('开始下载 B站视频（无音频）:', { url, qn, hasLogin: !!cookies });
-            
+
             // 获取视频信息
             const videoInfo = await this.getVideoInfo(url, cookies);
             const bvid = videoInfo.bvid;
             const cid = videoInfo.pages?.[0]?.cid || videoInfo.cid;
-            
+
             if (!cid) {
                 throw new Error('无法获取视频 CID');
             }
-            
+
             // 获取播放地址
             const playData = await this.getPlayUrl(bvid, cid, qn, cookies);
-            
+
             if (!playData || !playData.dash) {
                 throw new Error('无法获取视频流信息');
             }
-            
+
             const { video: videos } = playData.dash;
-            
+
             // 选择对应画质的视频流
             let selectedVideo = videos.find(v => v.id === qn);
             if (!selectedVideo) {
@@ -1244,33 +1621,33 @@ class BilibiliService {
                     return Math.abs(curr.id - qn) < Math.abs(prev.id - qn) ? curr : prev;
                 });
             }
-            
+
             const videoUrl = selectedVideo.baseUrl || selectedVideo.base_url;
-            
+
             // 生成文件名
             const timestamp = Date.now();
             const safeTitle = (videoInfo.title || 'video').replace(/[<>:"/\\|?*]/g, '_').substring(0, 50);
             const videoFile = path.join(this.downloadDir, `${timestamp}_video.m4s`);
-            
+
             // 下载视频流
-            console.log('下载视频流（无音频）...');
-            await this.downloadFile(videoUrl, videoFile);
-            
+            console.log('⬇️ 开始下载视频流（无音频）...');
+            await this.downloadFile(videoUrl, videoFile, '视频流');
+
             // 发送视频文件
             const stats = fs.statSync(videoFile);
             res.setHeader('Content-Type', 'video/mp4');
             res.setHeader('Content-Length', stats.size);
             res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeTitle)}_video.mp4"`);
-            
+
             const fileStream = fs.createReadStream(videoFile);
             fileStream.pipe(res);
-            
+
             fileStream.on('end', () => {
                 setTimeout(() => {
-                    try { fs.unlinkSync(videoFile); } catch (e) {}
+                    try { fs.unlinkSync(videoFile); } catch (e) { }
                 }, 5000);
             });
-            
+
         } catch (error) {
             console.error('B站视频（无音频）下载失败:', error);
             throw error;
@@ -1285,19 +1662,19 @@ class BilibiliService {
             const videoInfo = await this.getVideoInfo(url, cookies);
             const bvid = videoInfo.bvid;
             const cid = videoInfo.pages?.[0]?.cid || videoInfo.cid;
-            
+
             if (!cid) {
                 throw new Error('无法获取视频 CID');
             }
-            
+
             const playData = await this.getPlayUrl(bvid, cid, qn, cookies);
-            
+
             if (!playData || !playData.dash) {
                 throw new Error('无法获取视频流信息');
             }
-            
+
             const { video: videos, audio: audios } = playData.dash;
-            
+
             // 选择对应画质的视频流
             let selectedVideo = videos.find(v => v.id === qn);
             if (!selectedVideo) {
@@ -1305,14 +1682,14 @@ class BilibiliService {
                     return Math.abs(curr.id - qn) < Math.abs(prev.id - qn) ? curr : prev;
                 });
             }
-            
+
             const selectedAudio = audios && audios.length > 0 ? audios[0] : null;
-            
+
             const videoUrl = selectedVideo.baseUrl || selectedVideo.base_url;
             const audioUrl = selectedAudio ? (selectedAudio.baseUrl || selectedAudio.base_url) : null;
-            
+
             const safeTitle = (videoInfo.title || 'video').replace(/[<>:"/\\|?*]/g, '_').substring(0, 50);
-            
+
             return {
                 title: safeTitle,
                 videoUrl: videoUrl,
@@ -1367,7 +1744,7 @@ class BilibiliService {
     async convertVideoFormat(inputPath, outputPath, format) {
         return new Promise((resolve, reject) => {
             const formatConfig = this.getFormatConfig(format);
-            
+
             // 构建 ffmpeg 参数
             const args = [
                 '-i', inputPath,
@@ -1377,7 +1754,7 @@ class BilibiliService {
                 '-y',
                 outputPath
             ];
-            
+
             // 对于某些格式，添加额外参数
             if (format === 'webm') {
                 args.splice(-2, 0, '-b:v', '1M', '-b:a', '128k'); // 设置码率
@@ -1393,7 +1770,7 @@ class BilibiliService {
 
             let stderr = '';
             let hasError = false;
-            
+
             ffmpeg.stderr.on('data', (data) => {
                 const output = data.toString();
                 stderr += output;
@@ -1439,7 +1816,7 @@ class BilibiliService {
                 'aac': ['aac', '192k'],
                 'm4a': ['aac', '192k']
             };
-            
+
             const codec = audioCodecs[format] || ['libmp3lame', '192k'];
             const args = [
                 '-i', inputPath,
@@ -1457,7 +1834,7 @@ class BilibiliService {
 
             let stderr = '';
             let hasError = false;
-            
+
             ffmpeg.stderr.on('data', (data) => {
                 const output = data.toString();
                 stderr += output;
@@ -1498,60 +1875,60 @@ class BilibiliService {
         const timestamp = Date.now();
         const tempFile = path.join(this.downloadDir, `${timestamp}_temp.${type === 'audio' ? 'm4a' : 'm4s'}`);
         const outputFile = path.join(this.downloadDir, `${timestamp}_output.${format}`);
-        
+
         try {
             console.log(`开始下载并转换 ${type} 为 ${format} 格式...`);
-            
+
             // 先下载到临时文件（设置超时）
             const downloadPromise = this.downloadFile(url, tempFile);
-            const downloadTimeout = new Promise((_, reject) => 
+            const downloadTimeout = new Promise((_, reject) =>
                 setTimeout(() => reject(new Error('下载超时')), 60000) // 60秒超时
             );
             await Promise.race([downloadPromise, downloadTimeout]);
-            
+
             console.log(`下载完成，开始转换格式...`);
-            
+
             // 转换格式（设置超时）
-            const convertPromise = type === 'audio' 
+            const convertPromise = type === 'audio'
                 ? this.convertAudioFormat(tempFile, outputFile, format)
                 : this.convertVideoFormat(tempFile, outputFile, format);
-            const convertTimeout = new Promise((_, reject) => 
+            const convertTimeout = new Promise((_, reject) =>
                 setTimeout(() => reject(new Error('格式转换超时')), 300000) // 5分钟超时
             );
             await Promise.race([convertPromise, convertTimeout]);
-            
+
             console.log(`格式转换完成，开始发送文件...`);
-            
+
             // 检查输出文件是否存在
             if (!fs.existsSync(outputFile)) {
                 throw new Error('转换后的文件不存在');
             }
-            
+
             // 发送转换后的文件
             const stats = fs.statSync(outputFile);
             console.log(`准备发送文件: ${filename}, 大小: ${stats.size} bytes`);
-            
+
             const contentType = this.getContentType(format);
             res.setHeader('Content-Type', contentType);
             res.setHeader('Content-Length', stats.size);
             res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
             res.setHeader('Access-Control-Allow-Origin', '*');
             res.setHeader('Cache-Control', 'no-cache');
-            
+
             const fileStream = fs.createReadStream(outputFile);
-            
+
             // 监听数据流
             let bytesSent = 0;
             fileStream.on('data', (chunk) => {
                 bytesSent += chunk.length;
             });
-            
+
             fileStream.pipe(res);
-            
+
             fileStream.on('end', () => {
                 console.log(`文件发送完成: ${filename}, 已发送: ${bytesSent} bytes`);
                 setTimeout(() => {
-                    try { 
+                    try {
                         if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
                         if (fs.existsSync(outputFile)) fs.unlinkSync(outputFile);
                     } catch (e) {
@@ -1559,32 +1936,32 @@ class BilibiliService {
                     }
                 }, 5000);
             });
-            
+
             fileStream.on('error', (err) => {
                 console.error('发送文件流错误:', err.message);
                 if (!res.headersSent) {
                     res.status(500).json({ success: false, error: '发送文件失败' });
                 }
             });
-            
+
             res.on('close', () => {
                 console.log(`客户端连接关闭: ${filename}`);
             });
-            
+
         } catch (error) {
             console.error(`格式转换失败: ${error.message}`);
             console.error('错误堆栈:', error.stack);
-            
+
             // 清理临时文件
             try {
                 if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
                 if (fs.existsSync(outputFile)) fs.unlinkSync(outputFile);
-            } catch (e) {}
-            
+            } catch (e) { }
+
             // 如果转换失败，返回错误信息
             if (!res.headersSent) {
-                res.status(500).json({ 
-                    success: false, 
+                res.status(500).json({
+                    success: false,
                     error: `格式转换失败: ${error.message}`,
                     suggestion: '请检查服务器是否安装了 ffmpeg，或尝试使用原始格式下载'
                 });
@@ -1606,14 +1983,14 @@ class BilibiliService {
                 timeout: 300000,
                 headers: this.headers
             });
-            
+
             // 设置响应头
             res.setHeader('Content-Type', response.headers['content-type'] || 'application/octet-stream');
             if (response.headers['content-length']) {
                 res.setHeader('Content-Length', response.headers['content-length']);
             }
             res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
-            
+
             // 直接管道转发
             response.data.pipe(res);
         } catch (error) {

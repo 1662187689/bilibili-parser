@@ -22,6 +22,35 @@ class YtdlpService {
     }
 
     /**
+     * 将 Cookie 字符串写入临时 Netscape 格式文件，返回路径
+     */
+    buildCookieFile(cookieStr) {
+        if (!cookieStr) return null;
+        try {
+            const tmpPath = path.join(this.downloadDir, `cookies_${Date.now()}.txt`);
+            const lines = [
+                '# Netscape HTTP Cookie File',
+                '# This file is generated automatically.',
+            ];
+            const pairs = cookieStr.split(';').map(s => s.trim()).filter(Boolean);
+            pairs.forEach(pair => {
+                const eq = pair.indexOf('=');
+                if (eq > 0) {
+                    const name = pair.slice(0, eq).trim();
+                    const val = pair.slice(eq + 1).trim();
+                    // domain, include_subdomains, path, secure, expiry, name, value
+                    lines.push(`.bilibili.com\tTRUE\t/\tFALSE\t0\t${name}\t${val}`);
+                }
+            });
+            fs.writeFileSync(tmpPath, lines.join('\n'), 'utf8');
+            return tmpPath;
+        } catch (e) {
+            console.warn('写入 Cookie 文件失败:', e.message);
+            return null;
+        }
+    }
+
+    /**
      * 确保下载目录存在
      */
     ensureDownloadDir() {
@@ -78,20 +107,54 @@ class YtdlpService {
     }
 
     /**
-     * 获取视频信息
+     * 获取视频信息（支持自定义 Header / Cookie 以绕过 412）
+     * @param {string} url
+     * @param {object} opts { headers: {k:v}, cookie: string }
      */
-    async getVideoInfo(url) {
+    async getVideoInfo(url, opts = {}) {
         const check = await this.checkAvailable();
         if (!check.available) {
             throw new Error('yt-dlp 不可用');
         }
 
+        // 默认请求头（可被 opts.headers 覆盖）
+        const defaultHeaders = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
+            'Referer': 'https://www.bilibili.com/',
+            'Origin': 'https://www.bilibili.com',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.7',
+            'Accept': '*/*',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'same-origin'
+        };
+        const headers = { ...defaultHeaders, ...(opts.headers || {}) };
+        const cookie = opts.cookie;
+        const cookieFile = cookie ? this.buildCookieFile(cookie) : null;
+
+        // 构建参数
+        const args = ['--dump-json', '--no-playlist'];
+        // 显式设置 UA / Referer
+        if (headers['Referer']) args.push('--referer', headers['Referer']);
+        if (headers['User-Agent']) args.push('--user-agent', headers['User-Agent']);
+        Object.entries(headers).forEach(([k, v]) => {
+            if (v) args.push('--add-header', `${k}:${v}`);
+        });
+        if (cookieFile) {
+            args.push('--cookies', cookieFile);
+        } else if (cookie) {
+            args.push('--add-header', `Cookie:${cookie}`);
+        }
+        args.push(url);
+
+        // 转义参数为安全命令行
+        const escapeArg = (s) => `"${String(s).replace(/"/g, '\\"')}"`;
+        const cmd = `${check.command} ${args.map(escapeArg).join(' ')}`;
+
         try {
-            const { stdout } = await execAsync(
-                `${check.command} --dump-json --no-playlist "${url}"`,
-                { timeout: 60000, maxBuffer: 10 * 1024 * 1024 }
-            );
-            
+            const { stdout } = await execAsync(cmd, {
+                timeout: 60000,
+                maxBuffer: 10 * 1024 * 1024
+            });
             return JSON.parse(stdout);
         } catch (error) {
             throw new Error(`获取视频信息失败: ${error.message}`);
