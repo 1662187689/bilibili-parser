@@ -1249,7 +1249,43 @@
             background: rgba(255, 255, 255, 0.3);
         }
 
+        /* 🔧 队列控制按钮 */
+        .download-sidebar-controls {
+            display: flex;
+            gap: 8px;
+            padding: 12px 15px;
+            background: var(--bg-input);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .download-control-btn {
+            flex: 1;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            background: var(--bg-card);
+            color: var(--text-main);
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+
+        .download-control-btn:hover {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        .download-control-btn.danger:hover {
+            background: #ff4444;
+            border-color: #ff4444;
+        }
+
         .download-sidebar-body {
+
             flex: 1;
             overflow-y: auto;
             padding: 15px;
@@ -1378,6 +1414,18 @@
         .download-item.cancelled {
             opacity: 0.6;
             border-color: var(--text-gray);
+        }
+
+        .download-item.paused {
+            border-color: #f59e0b;
+        }
+
+        .download-item.paused .download-item-progress-fill {
+            background: #f59e0b;
+        }
+
+        .download-item.paused .download-item-stage {
+            color: #f59e0b;
         }
 
         .download-overlay {
@@ -1877,6 +1925,22 @@
                 <i class="fas fa-times"></i>
             </button>
         </div>
+        <!-- 🔧 队列控制按钮 -->
+        <div class="download-sidebar-controls">
+            <button id="pauseQueueBtn" onclick="pauseDownloadQueue()" title="暂停队列" class="download-control-btn">
+                <i class="fas fa-pause"></i>
+            </button>
+            <button id="resumeQueueBtn" onclick="resumeDownloadQueue()" title="恢复队列" class="download-control-btn"
+                style="display:none;">
+                <i class="fas fa-play"></i>
+            </button>
+            <button onclick="clearCompletedDownloads()" title="清除已完成" class="download-control-btn">
+                <i class="fas fa-broom"></i>
+            </button>
+            <button onclick="cancelAllDownloads()" title="取消全部" class="download-control-btn danger">
+                <i class="fas fa-stop"></i>
+            </button>
+        </div>
         <div class="download-sidebar-body" id="downloadList">
             <div class="download-empty">
                 <i class="fas fa-inbox"></i>
@@ -1885,10 +1949,11 @@
         </div>
     </div>
 
+
     <!-- 下载侧边栏遮罩 -->
     <div id="downloadOverlay" class="download-overlay" onclick="toggleDownloadSidebar()"></div>
 
-    <script src="/script.js"></script>
+    <script src="/script.js?v=1765289500"></script>
 </body>
 
 </html>
