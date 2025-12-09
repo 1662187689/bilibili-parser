@@ -1,3 +1,21 @@
+/**
+ * ============================================================
+ * 视频解析助手 - Express 服务端
+ * ============================================================
+ * 
+ * 代码结构：
+ *   1. 依赖导入与配置
+ *   2. 下载进度追踪
+ *   3. 公告系统 API
+ *   4. 登录系统 API (二维码/状态/登出)
+ *   5. 视频下载 API
+ *   6. 视频解析 API
+ *   7. 其他功能 API (收藏夹/批量/封面等)
+ *   8. 服务器启动
+ * 
+ * ============================================================
+ */
+
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -268,6 +286,8 @@ app.post('/api/bilibili/logout', (req, res) => {
     }
 });
 
+// ==================== 视频下载 API ====================
+
 // 视频下载（支持画质选择）
 app.get('/api/bilibili/download', async (req, res) => {
     try {
@@ -488,6 +508,8 @@ app.get('/api/bilibili/download/audio', async (req, res) => {
     }
 });
 
+// ==================== 其他功能 API ====================
+
 // 收藏夹处理
 app.get('/api/bilibili/favorites', async (req, res) => {
     try {
@@ -503,8 +525,6 @@ app.get('/api/bilibili/favorites', async (req, res) => {
         if (sessionId && loginSessions.has(sessionId)) {
             cookies = loginSessions.get(sessionId).cookies;
         }
-
-        console.log('处理收藏夹:', { id, hasLogin: !!cookies });
 
         // 使用multiPlatformService处理收藏夹
         const result = await multiPlatformService.parseBilibiliFavorites(id, cookies);
