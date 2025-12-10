@@ -14,7 +14,7 @@ class YtdlpService {
     constructor() {
         this.downloadDir = path.join(os.tmpdir(), 'ytdlp-downloads');
         this.ensureDownloadDir();
-        
+
         // 缓存 yt-dlp 可用性状态
         this.ytdlpAvailable = null;
         this.ytdlpCommand = null;
@@ -73,13 +73,13 @@ class YtdlpService {
         }
 
         const commands = ['yt-dlp', 'youtube-dl'];
-        
+
         for (const cmd of commands) {
             try {
                 const { stdout } = await execAsync(`${cmd} --version`, { timeout: 10000 });
                 this.ytdlpAvailable = true;
                 this.ytdlpCommand = cmd;
-                
+
                 // 检查 ffmpeg
                 try {
                     await execAsync('ffmpeg -version', { timeout: 5000 });
@@ -87,7 +87,7 @@ class YtdlpService {
                 } catch {
                     this.ffmpegAvailable = false;
                 }
-                
+
                 return {
                     available: true,
                     version: stdout.trim(),
@@ -182,7 +182,7 @@ class YtdlpService {
             // 先获取视频信息
             const info = await this.getVideoInfo(url);
             const safeTitle = (info.title || 'video').replace(/[<>:"/\\|?*]/g, '_').substring(0, 50);
-            
+
             // 设置响应头
             res.setHeader('Content-Type', 'video/mp4');
             res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeTitle)}.mp4"`);
@@ -243,7 +243,7 @@ class YtdlpService {
         }
 
         const command = `${check.command} -f "${formatOption}" --merge-output-format mp4 -o "${outputPath}" "${url}"`;
-        
+
         try {
             await execAsync(command, { timeout: 600000 }); // 10分钟超时
             return outputPath;
@@ -257,11 +257,11 @@ class YtdlpService {
      */
     formatDuration(seconds) {
         if (!seconds || isNaN(seconds)) return '00:00';
-        
+
         const hours = Math.floor(seconds / 3600);
         const minutes = Math.floor((seconds % 3600) / 60);
         const secs = Math.floor(seconds % 60);
-        
+
         if (hours > 0) {
             return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
         }

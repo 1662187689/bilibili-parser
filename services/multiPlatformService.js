@@ -1,6 +1,8 @@
 const axios = require('axios');
 const videoParser = require('./videoParser');
 const ytdlpService = require('./ytdlpService');
+const bilibiliService = require('./bilibiliService');
+
 
 /**
  * 多平台视频解析服务
@@ -94,7 +96,7 @@ class MultiPlatformService {
      */
     async parseVideo(url) {
         const platform = this.detectPlatform(url);
-        
+
         if (!platform) {
             throw new Error('不支持的视频平台');
         }
@@ -107,7 +109,7 @@ class MultiPlatformService {
             try {
                 console.log('[MultiPlatformService] 尝试使用 yt-dlp 解析...');
                 const info = await ytdlpService.getVideoInfo(url);
-                
+
                 return {
                     title: info.title || `${platform.name}视频`,
                     author: info.uploader || info.channel || info.creator || '未知作者',
@@ -132,7 +134,7 @@ class MultiPlatformService {
      */
     async parseMultiple(urls) {
         const results = [];
-        
+
         for (const url of urls) {
             try {
                 const result = await this.parseVideo(url.trim());
@@ -149,7 +151,7 @@ class MultiPlatformService {
                 });
             }
         }
-        
+
         return results;
     }
 
@@ -160,34 +162,34 @@ class MultiPlatformService {
         const results = [];
         let page = 1;
         const pageSize = 20;
-        
+
         try {
             while (true) {
                 const headers = {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                     'Referer': 'https://www.bilibili.com/'
                 };
-                
+
                 if (cookies) {
-                    headers['Cookie'] = typeof cookies === 'string' 
-                        ? cookies 
+                    headers['Cookie'] = typeof cookies === 'string'
+                        ? cookies
                         : Object.entries(cookies).map(([k, v]) => `${k}=${v}`).join('; ');
                 }
-                
+
                 const response = await axios.get(
                     `https://api.bilibili.com/x/v3/fav/resource/list?media_id=${favId}&pn=${page}&ps=${pageSize}&platform=web`,
                     { headers, timeout: 15000 }
                 );
-                
+
                 if (response.data.code !== 0) {
                     throw new Error(response.data.message || '获取收藏夹失败');
                 }
-                
+
                 const data = response.data.data;
                 if (!data || !data.medias || data.medias.length === 0) {
                     break;
                 }
-                
+
                 for (const media of data.medias) {
                     if (media.type === 2) { // 视频类型
                         results.push({
@@ -201,26 +203,26 @@ class MultiPlatformService {
                         });
                     }
                 }
-                
+
                 // 检查是否还有更多
                 if (!data.has_more) {
                     break;
                 }
-                
+
                 page++;
-                
+
                 // 限制最多获取200个视频
                 if (results.length >= 200) {
                     break;
                 }
             }
-            
+
             return {
                 success: true,
                 total: results.length,
                 videos: results
             };
-            
+
         } catch (error) {
             throw new Error(`解析收藏夹失败: ${error.message}`);
         }
@@ -228,39 +230,49 @@ class MultiPlatformService {
 
     /**
      * 解析B站用户投稿
+     * 策略：先尝试 WBI API，失败后自动使用 yt-dlp 备选方案
      */
     async parseBilibiliUserVideos(userId, cookies = null) {
         const results = [];
         let page = 1;
         const pageSize = 30;
-        
+
         try {
+            const cookieStr = await bilibiliService.getEffectiveCookieWithTicket(cookies);
+
             while (true) {
-                const headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                    'Referer': 'https://www.bilibili.com/'
+                // 使用 WBI 签名（参考 BBDown 实现）
+                const baseParams = {
+                    mid: userId,
+                    pn: page,
+                    ps: pageSize,
+                    order: 'pubdate',
+                    tid: 0
                 };
-                
-                if (cookies) {
-                    headers['Cookie'] = typeof cookies === 'string' 
-                        ? cookies 
-                        : Object.entries(cookies).map(([k, v]) => `${k}=${v}`).join('; ');
-                }
-                
+
+                const signedParams = await bilibiliService.encWbi(baseParams, cookies);
+
+                const headers = {
+                    ...bilibiliService.headers,
+                    'Cookie': cookieStr,
+                    'Referer': `https://space.bilibili.com/${userId}/video`
+                };
+
+                const queryString = new URLSearchParams(signedParams).toString();
                 const response = await axios.get(
-                    `https://api.bilibili.com/x/space/arc/search?mid=${userId}&pn=${page}&ps=${pageSize}`,
+                    `https://api.bilibili.com/x/space/wbi/arc/search?${queryString}`,
                     { headers, timeout: 15000 }
                 );
-                
+
                 if (response.data.code !== 0) {
                     throw new Error(response.data.message || '获取用户视频失败');
                 }
-                
+
                 const data = response.data.data;
                 if (!data || !data.list || !data.list.vlist || data.list.vlist.length === 0) {
                     break;
                 }
-                
+
                 for (const video of data.list.vlist) {
                     results.push({
                         title: video.title,
@@ -274,26 +286,41 @@ class MultiPlatformService {
                         created: video.created
                     });
                 }
-                
-                // 检查是否还有更多
+
                 const total = data.page?.count || 0;
                 if (results.length >= total || results.length >= 200) {
                     break;
                 }
-                
+
                 page++;
+                await new Promise(resolve => setTimeout(resolve, 300));
             }
-            
+
             return {
                 success: true,
                 total: results.length,
                 videos: results
             };
-            
+
         } catch (error) {
-            throw new Error(`解析用户投稿失败: ${error.message}`);
+            // WBI API 失败，尝试使用 yt-dlp 备选方案
+            console.log('WBI API 失败，尝试 yt-dlp 备选方案...');
+            try {
+                const ytdlpResult = await ytdlpService.getBilibiliUserVideos(userId);
+                if (ytdlpResult.success && ytdlpResult.videos.length > 0) {
+                    console.log(`✅ yt-dlp 成功获取 ${ytdlpResult.videos.length} 个视频`);
+                    return ytdlpResult;
+                }
+            } catch (ytdlpError) {
+                console.log('yt-dlp 备选方案也失败:', ytdlpError.message);
+            }
+
+            throw new Error(`解析用户投稿失败: ${error.message}。建议：1. 登录B站账号后重试 2. 稍后再试`);
         }
     }
+
+
+
 
     /**
      * 格式化 yt-dlp 返回的格式列表
@@ -309,13 +336,13 @@ class MultiPlatformService {
 
         // 按分辨率分组
         const qualityMap = new Map();
-        
+
         formats.forEach(format => {
             if (!format.height) return;
-            
+
             const height = format.height;
             const key = height;
-            
+
             if (!qualityMap.has(key) || (format.filesize && qualityMap.get(key).filesize < format.filesize)) {
                 qualityMap.set(key, format);
             }
@@ -323,21 +350,21 @@ class MultiPlatformService {
 
         // 转换为下载链接列表
         const downloadLinks = [];
-        
+
         // 按分辨率排序
         const sortedHeights = Array.from(qualityMap.keys()).sort((a, b) => b - a);
-        
+
         sortedHeights.forEach(height => {
             const format = qualityMap.get(height);
             let qualityName = `${height}P`;
-            
+
             if (height >= 2160) qualityName = '4K';
             else if (height >= 1440) qualityName = '2K';
             else if (height >= 1080) qualityName = '1080P';
             else if (height >= 720) qualityName = '720P';
             else if (height >= 480) qualityName = '480P';
             else if (height >= 360) qualityName = '360P';
-            
+
             downloadLinks.push({
                 quality: qualityName,
                 formatId: format.format_id,
@@ -364,11 +391,11 @@ class MultiPlatformService {
      */
     formatSeconds(seconds) {
         if (!seconds || isNaN(seconds)) return '00:00';
-        
+
         const hours = Math.floor(seconds / 3600);
         const minutes = Math.floor((seconds % 3600) / 60);
         const secs = Math.floor(seconds % 60);
-        
+
         if (hours > 0) {
             return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
         }
@@ -393,10 +420,10 @@ class MultiPlatformService {
         // https://www.bilibili.com/medialist/detail/ml123456
         const fidMatch = url.match(/fid=(\d+)/);
         if (fidMatch) return fidMatch[1];
-        
+
         const mlMatch = url.match(/ml(\d+)/);
         if (mlMatch) return mlMatch[1];
-        
+
         return null;
     }
 

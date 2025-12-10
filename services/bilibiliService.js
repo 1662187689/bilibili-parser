@@ -351,6 +351,79 @@ class BilibiliService {
     }
 
     /**
+     * 获取 bili_ticket（可降低风控概率）
+     * 参考 bilibili-API-collect 文档
+     */
+    async getBiliTicket() {
+        const now = Date.now();
+
+        // 缓存 3 天
+        if (this.biliTicket && now < this.biliTicketExpire) {
+            return this.biliTicket;
+        }
+
+        try {
+            const ts = Math.floor(now / 1000);
+            const hexSign = crypto.createHmac('sha256', 'XgwSnGZ1p')
+                .update(`ts${ts}`)
+                .digest('hex');
+
+            const params = new URLSearchParams({
+                key_id: 'ec02',
+                hexsign: hexSign,
+                'context[ts]': ts,
+                csrf: ''
+            });
+
+            const url = `https://api.bilibili.com/bapis/bilibili.api.ticket.v1.Ticket/GenWebTicket?${params.toString()}`;
+
+            const response = await axios.post(url, null, {
+                headers: {
+                    'User-Agent': this.headers['User-Agent'],
+                    'Referer': 'https://www.bilibili.com/'
+                },
+                timeout: 10000
+            });
+
+            if (response.data?.code === 0 && response.data?.data?.ticket) {
+                this.biliTicket = response.data.data.ticket;
+                this.biliTicketExpire = now + 259000 * 1000;
+                console.log('✅ 获取 bili_ticket 成功');
+                return this.biliTicket;
+            }
+        } catch (error) {
+            console.log('获取 bili_ticket 失败:', error.message);
+        }
+
+        return null;
+    }
+
+    /**
+     * 获取带 bili_ticket 的完整 Cookie（用于风控敏感接口）
+     */
+    async getEffectiveCookieWithTicket(cookies = null) {
+        // 始终使用 baseCookie 包含 buvid3/buvid4 等风控必需字段
+        let fullCookie = this.baseCookie;
+
+        // 追加登录信息
+        if (this.envCookies?.SESSDATA) {
+            fullCookie += `; SESSDATA=${this.envCookies.SESSDATA}`;
+            if (this.envCookies.bili_jct) fullCookie += `; bili_jct=${this.envCookies.bili_jct}`;
+            if (this.envCookies.DedeUserID) fullCookie += `; DedeUserID=${this.envCookies.DedeUserID}`;
+        } else if (cookies) {
+            fullCookie += `; ${this.formatCookies(cookies)}`;
+        }
+
+        // 追加 bili_ticket
+        const ticket = await this.getBiliTicket();
+        if (ticket) {
+            fullCookie += `; bili_ticket=${ticket}`;
+        }
+
+        return fullCookie;
+    }
+
+    /**
      * 生成b_lsid
      */
     generateBLsid() {
