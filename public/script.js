@@ -4112,17 +4112,19 @@ const bgConfig = {
         // 'images/bg1.jpg',
         // 'images/bg2.jpg',
         // 'images/bg3.jpg',
-        // 在线API（备用）
+        // 在线API（备用）- 使用更可靠的源
         'https://api.ixiaowai.cn/gqapi/gqapi.php', // 风景/二次元API
-        'https://img.paulzzh.com/touhou/random', // 东方Project随机图 (质量高)
         'https://www.dmoe.cc/random.php', // 随机二次元美少女
-        'https://api.ixiaowai.cn/api/api.php', // 综合随机二次元
     ],
     // 轮换间隔（毫秒）：3分钟 = 180000ms
     rotateInterval: 180000,
     // 当前使用的图片索引
-    currentIndex: 0
+    currentIndex: 0,
+    // 失败计数（连续失败后使用默认渐变）
+    failCount: 0,
+    maxFailCount: 3
 };
+
 
 // 背景图轮换定时器
 let bgRotateTimer = null;
@@ -4130,7 +4132,13 @@ let bgRotateTimer = null;
 // 更新背景图逻辑（不随主题切换，3分钟自动轮换）
 function updateBackgroundImage() {
     const bgElement = document.getElementById('backgroundImage');
-    if (!bgElement || !bgConfig.images || bgConfig.images.length === 0) return;
+    if (!bgElement) return;
+
+    // 如果连续失败超过限制，使用默认渐变
+    if (bgConfig.failCount >= bgConfig.maxFailCount || bgConfig.images.length === 0) {
+        applyDefaultGradient(bgElement);
+        return;
+    }
 
     // 按顺序选择图片（循环）
     let url = bgConfig.images[bgConfig.currentIndex];
@@ -4145,6 +4153,8 @@ function updateBackgroundImage() {
     img.src = url;
 
     img.onload = () => {
+        // 加载成功，重置失败计数
+        bgConfig.failCount = 0;
         // 直接设置背景图，让CSS控制透明度和滤镜
         bgElement.style.backgroundImage = `url('${url}')`;
         // 清除内联样式，让CSS类控制效果
@@ -4156,22 +4166,31 @@ function updateBackgroundImage() {
     };
 
     img.onerror = () => {
-        console.warn('背景图加载失败，跳过到下一张');
-        // 加载失败时跳过到下一张
+        bgConfig.failCount++;
+        console.warn(`背景图加载失败 (${bgConfig.failCount}/${bgConfig.maxFailCount})，尝试下一张...`);
+
+        // 跳过到下一张
         bgConfig.currentIndex = (bgConfig.currentIndex + 1) % bgConfig.images.length;
-        // 如果还有图片，尝试加载下一张
-        if (bgConfig.images.length > 0) {
-            setTimeout(() => updateBackgroundImage(), 1000);
+
+        // 如果还没超过失败限制，尝试加载下一张
+        if (bgConfig.failCount < bgConfig.maxFailCount) {
+            setTimeout(() => updateBackgroundImage(), 500);
         } else {
-            // 没有可用图片时使用渐变
-            const isDark = document.body.classList.contains('dark-theme');
-            if (isDark) {
-                bgElement.style.backgroundImage = 'linear-gradient(135deg, #2d1934 0%, #231428 50%, #321937 100%)';
-            } else {
-                bgElement.style.backgroundImage = 'linear-gradient(135deg, #ffeef5 0%, #fff0f5 50%, #ffe4ec 100%)';
-            }
+            // 超过失败限制，使用默认渐变
+            console.log('背景图加载多次失败，使用默认渐变背景');
+            applyDefaultGradient(bgElement);
         }
     };
+}
+
+// 应用默认渐变背景
+function applyDefaultGradient(bgElement) {
+    const isDark = document.body.classList.contains('dark-theme');
+    if (isDark) {
+        bgElement.style.backgroundImage = 'linear-gradient(135deg, #2d1934 0%, #231428 50%, #321937 100%)';
+    } else {
+        bgElement.style.backgroundImage = 'linear-gradient(135deg, #ffeef5 0%, #fff0f5 50%, #ffe4ec 100%)';
+    }
 }
 
 // 切换主题（新 HTML 使用）

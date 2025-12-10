@@ -92,6 +92,13 @@
             background-position: center;
             background-repeat: no-repeat;
             transition: opacity 0.8s ease, filter 0.8s ease, background-image 0.8s ease;
+            /* 默认渐变背景（在线图片加载前显示） */
+            background-image: linear-gradient(135deg, #ffeef5 0%, #fff0f5 50%, #ffe4ec 100%);
+        }
+
+        /* 暗色主题默认背景 */
+        body.dark-theme .background-image {
+            background-image: linear-gradient(135deg, #2d1934 0%, #231428 50%, #321937 100%);
         }
 
         /* 白天主题背景图 - 明显的二次元美少女 */
