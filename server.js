@@ -22,7 +22,6 @@ const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
 const cookieParser = require('cookie-parser');
-const videoParser = require('./services/videoParser');
 const ytdlpService = require('./services/ytdlpService');
 const bilibiliService = require('./services/bilibiliService');
 const multiPlatformService = require('./services/multiPlatformService');
@@ -768,17 +767,12 @@ app.post('/api/parse', async (req, res) => {
             }
             result.platform = '视频';
         } else {
-            // 其他平台，使用多平台处理服务（优先yt-dlp，备用API）
+            // 其他平台，使用多平台处理服务
             try {
                 result = await multiPlatformService.parseVideo(url);
             } catch (multiError) {
-                // 如果多平台服务失败，尝试使用旧的videoParser作为备用
-                console.log('多平台服务失败，尝试备用处理器:', multiError.message);
-                try {
-                    result = await videoParser.parse(url);
-                } catch (backupError) {
-                    throw new Error(`视频处理失败: ${multiError.message}`);
-                }
+                console.log('多平台服务失败:', multiError.message);
+                throw new Error(`视频处理失败: ${multiError.message}`);
             }
         }
 
@@ -813,10 +807,9 @@ app.get('/api/platforms', (req, res) => {
             platforms: platforms
         });
     } catch (error) {
-        // 备用：使用旧的videoParser
         res.json({
             success: true,
-            platforms: videoParser.getSupportedPlatforms()
+            platforms: []
         });
     }
 });

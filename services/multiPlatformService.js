@@ -1,5 +1,4 @@
 const axios = require('axios');
-const videoParser = require('./videoParser');
 const ytdlpService = require('./ytdlpService');
 const bilibiliService = require('./bilibiliService');
 
@@ -124,9 +123,8 @@ class MultiPlatformService {
             }
         }
 
-        // 备用：使用 videoParser
-        console.log('[MultiPlatformService] 使用 videoParser 解析...');
-        return await videoParser.parse(url);
+        // 所有解析方法均失败
+        throw new Error('所有解析方法均失败，请检查链接或稍后重试');
     }
 
     /**
